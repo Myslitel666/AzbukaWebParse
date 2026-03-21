@@ -4,6 +4,7 @@ import time
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.section import WD_ORIENTATION
 import requests
 from bs4 import BeautifulSoup
 
@@ -36,6 +37,54 @@ for span in soup.find_all('span', class_='h2o'):
 
 print(f"Найдено собеседований: {len(conversations)}")
 
+# ========== ФУНКЦИЯ ДЛЯ НАСТРОЙКИ КОЛОНТИТУЛОВ ==========
+# ========== ФУНКЦИЯ ДЛЯ НАСТРОЙКИ КОЛОНТИТУЛОВ ==========
+def setup_footer(doc):
+    """Настраивает нижний колонтитул с нумерацией страниц"""
+    section = doc.sections[0]
+    
+    # Включаем нумерацию страниц
+    section.header.is_linked_to_previous = False
+    section.footer.is_linked_to_previous = False
+    
+    # Получаем нижний колонтитул
+    footer = section.footer
+    footer_paragraph = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+    footer_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    footer_paragraph.clear()
+    
+    # Добавляем левое тире
+    run_left = footer_paragraph.add_run("— ")
+    run_left.font.size = Pt(10)
+    run_left.font.name = 'Arial Narrow'
+    run_left.font.color.rgb = RGBColor(0, 0, 0)
+    
+    # Добавляем поле номера страницы через add_run()._element
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    
+    run_page = footer_paragraph.add_run()
+    fldChar1 = OxmlElement('w:fldChar')
+    fldChar1.set(qn('w:fldCharType'), 'begin')
+    run_page._r.append(fldChar1)
+    
+    instrText = OxmlElement('w:instrText')
+    instrText.text = "PAGE"
+    run_page._r.append(instrText)
+    
+    fldChar2 = OxmlElement('w:fldChar')
+    fldChar2.set(qn('w:fldCharType'), 'end')
+    run_page._r.append(fldChar2)
+    run_page.font.size = Pt(10)
+    run_page.font.name = 'Arial Narrow'
+    run_page.font.color.rgb = RGBColor(0, 0, 0)
+    
+    # Добавляем правое тире
+    run_right = footer_paragraph.add_run(" —")
+    run_right.font.size = Pt(10)
+    run_right.font.name = 'Arial Narrow'
+    run_right.font.color.rgb = RGBColor(0, 0, 0)
+
 # ========== ФУНКЦИЯ ДЛЯ ПАРСИНГА ОДНОГО СОБЕСЕДОВАНИЯ ==========
 def parse_conversation(conv_url):
     """Загружает страницу собеседования и парсит все главы с текстом"""
@@ -49,7 +98,6 @@ def parse_conversation(conv_url):
         
         # Находим все h2 с классом text-center (заголовки глав)
         headings = soup.find_all('h2', class_='text-center')
-        print(f"    Найдено заголовков h2: {len(headings)}")
         
         for heading in headings:
             chapter_title = heading.get_text(strip=True).replace('\n', ' ').strip()
@@ -106,6 +154,9 @@ section.top_margin = Inches(1)
 section.bottom_margin = Inches(1)
 section.left_margin = Inches(1)
 section.right_margin = Inches(1)
+
+# ========== НАСТРОЙКА КОЛОНТИТУЛОВ ==========
+setup_footer(doc)
 
 # ========== ЗАГОЛОВОК ДОКУМЕНТА ==========
 main_title = doc.add_heading('Писания к десяти', level=1)
