@@ -17,7 +17,7 @@ def load_config():
         return json.load(f)
 
 config = load_config()
-FONT_NAME = config['font_name']  # Общее название шрифта для всего документа
+FONT_NAME = config['font_name']
 
 # ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 def apply_font(run, font_config):
@@ -67,7 +67,6 @@ def setup_footer(doc):
 
 def setup_styles(doc):
     """Настраивает стили заголовков и стили TOC для оглавления"""
-    # Стиль для заголовка 1 уровня (собеседования)
     style_h1 = doc.styles['Heading 1']
     font = style_h1.font
     font.name = FONT_NAME
@@ -77,7 +76,6 @@ def setup_styles(doc):
     rgb = config['fonts']['conversation']['color_rgb']
     font.color.rgb = RGBColor(rgb[0], rgb[1], rgb[2])
     
-    # Стиль для заголовка 2 уровня (главы)
     style_h2 = doc.styles['Heading 2']
     font = style_h2.font
     font.name = FONT_NAME
@@ -87,10 +85,8 @@ def setup_styles(doc):
     rgb = config['fonts']['chapter']['color_rgb']
     font.color.rgb = RGBColor(rgb[0], rgb[1], rgb[2])
     
-    # Настраиваем стили TOC для оглавления
     text_config = config['fonts']['text']
     
-    # TOC 1 - для заголовков уровня 1 в оглавлении
     try:
         style_toc1 = doc.styles['TOC 1']
         font = style_toc1.font
@@ -103,7 +99,6 @@ def setup_styles(doc):
     except:
         pass
     
-    # TOC 2 - для заголовков уровня 2 в оглавлении
     try:
         style_toc2 = doc.styles['TOC 2']
         font = style_toc2.font
@@ -118,7 +113,6 @@ def setup_styles(doc):
 
 def add_table_of_contents(doc):
     """Добавляет автоматическое оглавление с заметкой"""
-    # Обычный абзац "Содержание" (не заголовок)
     toc_paragraph = doc.add_paragraph()
     toc_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
@@ -128,38 +122,85 @@ def add_table_of_contents(doc):
     run_title.font.bold = True
     run_title.font.color.rgb = RGBColor(0, 0, 0)
     
-    # Пустая строка после заголовка
     doc.add_paragraph()
     
-    # Поле TOC
     paragraph = doc.add_paragraph()
     run = paragraph.add_run()
     
-    # Начало поля
     fldChar1 = OxmlElement('w:fldChar')
     fldChar1.set(qn('w:fldCharType'), 'begin')
     run._r.append(fldChar1)
     
-    # Инструкция TOC (включаем заголовки уровней 1 и 2)
     instrText = OxmlElement('w:instrText')
     instrText.text = 'TOC \\o "1-2" \\h \\z \\u'
     run._r.append(instrText)
     
-    # Конец поля
     fldChar2 = OxmlElement('w:fldChar')
     fldChar2.set(qn('w:fldCharType'), 'end')
     run._r.append(fldChar2)
     
-    # Заметка для пользователя
     note = doc.add_paragraph()
     note.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_note = note.add_run('(Нажмите Ctrl+A, затем F9 для обновления содержания)')
     run_note.font.size = Pt(10)
     run_note.font.italic = True
     run_note.font.color.rgb = RGBColor(128, 128, 128)
+    
+    doc.add_page_break()
 
-# ========== ПАРСИНГ САЙТА ==========
+# ========== ФУНКЦИЯ ДЛЯ ФОРМАТИРОВАННОГО ТЕКСТА ==========
+def add_formatted_paragraph(doc, p_element, text_config):
+    """Добавляет параграф в документ с сохранением форматирования (жирный/курсив)"""
+    paragraph = doc.add_paragraph()
+    paragraph.paragraph_format.first_line_indent = Cm(text_config.get('first_line_indent_cm', 0.76))
+    
+    # Обрабатываем все дочерние элементы
+    for child in p_element.children:
+        if isinstance(child, str):
+            # Обычный текст
+            if child.strip():
+                run = paragraph.add_run(child.strip())
+                apply_font(run, text_config)
+        elif child.name == 'b':
+            # Жирный текст
+            text = child.get_text().strip()
+            if text:
+                run = paragraph.add_run(text)
+                apply_font(run, text_config)
+                run.font.bold = True
+        elif child.name == 'span':
+            # Проверяем класс для цитат
+            classes = child.get('class', [])
+            if 'quote' in classes or 'synodal' in classes:
+                # Цитата курсивом
+                text = child.get_text().strip()
+                if text:
+                    run = paragraph.add_run(text)
+                    apply_font(run, text_config)
+                    run.font.italic = True
+            else:
+                # Обычный span
+                text = child.get_text().strip()
+                if text:
+                    run = paragraph.add_run(text)
+                    apply_font(run, text_config)
+        elif child.name == 'a':
+            # Ссылки (берём только текст)
+            text = child.get_text().strip()
+            if text:
+                run = paragraph.add_run(text)
+                apply_font(run, text_config)
+        elif child.name == 'br':
+            paragraph.add_run('\n')
+        else:
+            # Для любых других тегов - берём текст
+            text = child.get_text().strip()
+            if text:
+                run = paragraph.add_run(text)
+                apply_font(run, text_config)
+
 def get_conversations():
+    """Получает список собеседований с главной страницы"""
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -185,8 +226,8 @@ def get_conversations():
     
     return conversations
 
-def parse_conversation(conv_url):
-    """Загружает страницу собеседования и парсит все главы с текстом"""
+def parse_conversation(conv_url, doc, text_config):
+    """Загружает страницу собеседования и парсит все главы с текстом и форматированием"""
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
@@ -204,30 +245,15 @@ def parse_conversation(conv_url):
             chapter_title = heading.get_text(strip=True).replace('\n', ' ').strip()
             next_div = heading.find_next_sibling('div')
             
-            chapter_text = []
             if next_div:
                 # Ищем все параграфы внутри div
                 paragraphs = next_div.find_all('p', class_='txt')
                 
-                for p in paragraphs:
-                    # Заменяем <br> на пробелы
-                    for br in p.find_all('br'):
-                        br.replace_with(' ')
-                    
-                    # Получаем текст, вставляя пробелы между элементами
-                    # Используем get_text() с разделителем пробелом
-                    # Но сначала удаляем все лишние пробелы
-                    text = p.get_text()
-                    # Заменяем множественные пробелы на один
-                    text = ' '.join(text.split())
-                    if text:
-                        chapter_text.append(text)
-            
-            if chapter_text:
-                chapters.append({
-                    'title': chapter_title,
-                    'content': chapter_text
-                })
+                if paragraphs:
+                    chapters.append({
+                        'title': chapter_title,
+                        'paragraphs': paragraphs
+                    })
         
         return chapters
         
@@ -260,10 +286,10 @@ section.right_margin = Cm(config['margins']['right_cm'])
 # Настройка колонтитулов
 setup_footer(doc)
 
-# ========== НАСТРОЙКА СТИЛЕЙ ==========
+# Настройка стилей
 setup_styles(doc)
 
-# ========== НАЗВАНИЕ КНИГИ (обычный абзац, не заголовок) ==========
+# Название книги (обычный абзац, не заголовок)
 book_title = doc.add_paragraph()
 book_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 run_title = book_title.add_run(config['headers']['main_title'])
@@ -277,7 +303,7 @@ apply_font(run_author, config['fonts']['subtitle'])
 
 doc.add_paragraph()
 
-# ========== ДОБАВЛЯЕМ ОГЛАВЛЕНИЕ ==========
+# Добавляем оглавление
 add_table_of_contents(doc)
 
 # Получаем список собеседований
@@ -286,6 +312,7 @@ print(f"Найдено собеседований: {len(conversations)}")
 
 # Парсим каждое собеседование
 total_chapters = 0
+text_config = config['fonts']['text']
 
 for conv in conversations:
     print(f"\nОбрабатываю: {conv['title']}")
@@ -295,12 +322,11 @@ for conv in conversations:
     conv_heading.paragraph_format.page_break_before = False
     conv_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    # Принудительно применяем шрифт к каждому run в заголовке
     for run in conv_heading.runs:
         apply_font(run, config['fonts']['conversation'])
     
     # Парсим главы
-    chapters = parse_conversation(conv['url'])
+    chapters = parse_conversation(conv['url'], doc, text_config)
     print(f"  Найдено глав с текстом: {len(chapters)}")
     
     # Добавляем главы
@@ -310,17 +336,12 @@ for conv in conversations:
         chapter_heading.paragraph_format.page_break_before = False
         chapter_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
-        # Принудительно применяем шрифт к каждому run в заголовке главы
         for run in chapter_heading.runs:
             apply_font(run, config['fonts']['chapter'])
         
-        # Текст главы
-        text_config = config['fonts']['text']
-        for para_text in chapter['content']:
-            paragraph = doc.add_paragraph(para_text)
-            paragraph.paragraph_format.first_line_indent = Cm(text_config.get('first_line_indent_cm', 0.76))
-            for run in paragraph.runs:
-                apply_font(run, text_config)
+        # Добавляем текст главы с форматированием
+        for p in chapter['paragraphs']:
+            add_formatted_paragraph(doc, p, text_config)
         
         total_chapters += 1
     
