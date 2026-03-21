@@ -154,16 +154,28 @@ def add_formatted_paragraph(doc, p_element, text_config):
     paragraph = doc.add_paragraph()
     paragraph.paragraph_format.first_line_indent = Cm(text_config.get('first_line_indent_cm', 0.76))
     
+    # Устанавливаем выравнивание из конфига
+    alignment = text_config.get('alignment', 'justify')
+    if alignment == 'justify':
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    elif alignment == 'center':
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    elif alignment == 'left':
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    elif alignment == 'right':
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    
     # Обрабатываем все дочерние элементы
     for child in p_element.children:
         if isinstance(child, str):
-            # Обычный текст
-            if child.strip():
-                run = paragraph.add_run(child.strip())
+            # Обычный текст - добавляем как есть, сохраняя пробелы
+            if child:
+                # Не используем strip(), чтобы сохранить пробелы
+                run = paragraph.add_run(child)
                 apply_font(run, text_config)
         elif child.name == 'b':
             # Жирный текст
-            text = child.get_text().strip()
+            text = child.get_text()
             if text:
                 run = paragraph.add_run(text)
                 apply_font(run, text_config)
@@ -173,20 +185,20 @@ def add_formatted_paragraph(doc, p_element, text_config):
             classes = child.get('class', [])
             if 'quote' in classes or 'synodal' in classes:
                 # Цитата курсивом
-                text = child.get_text().strip()
+                text = child.get_text()
                 if text:
                     run = paragraph.add_run(text)
                     apply_font(run, text_config)
                     run.font.italic = True
             else:
                 # Обычный span
-                text = child.get_text().strip()
+                text = child.get_text()
                 if text:
                     run = paragraph.add_run(text)
                     apply_font(run, text_config)
         elif child.name == 'a':
             # Ссылки (берём только текст)
-            text = child.get_text().strip()
+            text = child.get_text()
             if text:
                 run = paragraph.add_run(text)
                 apply_font(run, text_config)
@@ -194,7 +206,7 @@ def add_formatted_paragraph(doc, p_element, text_config):
             paragraph.add_run('\n')
         else:
             # Для любых других тегов - берём текст
-            text = child.get_text().strip()
+            text = child.get_text()
             if text:
                 run = paragraph.add_run(text)
                 apply_font(run, text_config)
