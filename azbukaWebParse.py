@@ -51,17 +51,14 @@ def parse_conversation(conv_url):
         headings = soup.find_all('h2', class_='text-center')
         print(f"    Найдено заголовков h2: {len(headings)}")
         
-        for i, heading in enumerate(headings):
+        for heading in headings:
             chapter_title = heading.get_text(strip=True).replace('\n', ' ').strip()
-            print(f"    Заголовок {i+1}: {chapter_title[:60]}...")
             
-            # Ищем следующий div (без класса) после заголовка
-            # В структуре: <h2>...</h2> -> <div> -> <p class="txt">...</p>
+            # Ищем следующий div после заголовка
             next_div = heading.find_next_sibling('div')
             
             chapter_text = []
             if next_div:
-                # Ищем внутри div все p с классом txt
                 paragraphs = next_div.find_all('p', class_='txt')
                 if paragraphs:
                     for p in paragraphs:
@@ -69,7 +66,6 @@ def parse_conversation(conv_url):
                         if text:
                             chapter_text.append(text)
                 else:
-                    # Если нет p, берем текст из div
                     text = next_div.get_text(strip=True)
                     if text:
                         chapter_text.append(text)
@@ -79,9 +75,6 @@ def parse_conversation(conv_url):
                     'title': chapter_title,
                     'content': chapter_text
                 })
-                print(f"      Добавлена глава, абзацев: {len(chapter_text)}")
-            else:
-                print(f"      Нет текста для этой главы")
         
         return chapters
         
@@ -144,9 +137,10 @@ total_chapters = 0
 for conv in conversations:
     print(f"\nОбрабатываю: {conv['title']}")
     
-    # Заголовок собеседования (уровень 1)
+    # Заголовок собеседования (уровень 1) - центрируем
     conv_heading = doc.add_heading(conv['title'], level=1)
     conv_heading.paragraph_format.page_break_before = False
+    conv_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
     for run in conv_heading.runs:
         run.font.size = Pt(18)
@@ -160,9 +154,10 @@ for conv in conversations:
     
     # Добавляем каждую главу в документ
     for chapter in chapters:
-        # Заголовок главы (уровень 2)
+        # Заголовок главы (уровень 2) - центрируем
         chapter_heading = doc.add_heading(chapter['title'], level=2)
         chapter_heading.paragraph_format.page_break_before = False
+        chapter_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
         for run in chapter_heading.runs:
             run.font.size = Pt(14)
