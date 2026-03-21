@@ -2,9 +2,11 @@ import os
 import subprocess
 import time
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Inches, Pt, RGBColor, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.section import WD_ORIENTATION
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 import requests
 from bs4 import BeautifulSoup
 
@@ -38,12 +40,11 @@ for span in soup.find_all('span', class_='h2o'):
 print(f"Найдено собеседований: {len(conversations)}")
 
 # ========== ФУНКЦИЯ ДЛЯ НАСТРОЙКИ КОЛОНТИТУЛОВ ==========
-# ========== ФУНКЦИЯ ДЛЯ НАСТРОЙКИ КОЛОНТИТУЛОВ ==========
 def setup_footer(doc):
-    """Настраивает нижний колонтитул с нумерацией страниц"""
+    """Настраивает нижний колонтитул с нумерацией страниц в формате — 1 —"""
     section = doc.sections[0]
     
-    # Включаем нумерацию страниц
+    # Отключаем связь с предыдущими секциями
     section.header.is_linked_to_previous = False
     section.footer.is_linked_to_previous = False
     
@@ -53,33 +54,35 @@ def setup_footer(doc):
     footer_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     footer_paragraph.clear()
     
-    # Добавляем левое тире
+    # Левое тире
     run_left = footer_paragraph.add_run("— ")
     run_left.font.size = Pt(10)
     run_left.font.name = 'Arial Narrow'
     run_left.font.color.rgb = RGBColor(0, 0, 0)
     
-    # Добавляем поле номера страницы через add_run()._element
-    from docx.oxml import OxmlElement
-    from docx.oxml.ns import qn
-    
+    # Поле номера страницы
     run_page = footer_paragraph.add_run()
+    
+    # Начало поля
     fldChar1 = OxmlElement('w:fldChar')
     fldChar1.set(qn('w:fldCharType'), 'begin')
     run_page._r.append(fldChar1)
     
+    # Инструкция PAGE
     instrText = OxmlElement('w:instrText')
     instrText.text = "PAGE"
     run_page._r.append(instrText)
     
+    # Конец поля
     fldChar2 = OxmlElement('w:fldChar')
     fldChar2.set(qn('w:fldCharType'), 'end')
     run_page._r.append(fldChar2)
+    
     run_page.font.size = Pt(10)
     run_page.font.name = 'Arial Narrow'
     run_page.font.color.rgb = RGBColor(0, 0, 0)
     
-    # Добавляем правое тире
+    # Правое тире
     run_right = footer_paragraph.add_run(" —")
     run_right.font.size = Pt(10)
     run_right.font.name = 'Arial Narrow'
@@ -150,10 +153,10 @@ doc = Document()
 
 # ========== НАСТРОЙКА ПОЛЕЙ ==========
 section = doc.sections[0]
-section.top_margin = Inches(1)
-section.bottom_margin = Inches(1)
-section.left_margin = Inches(1)
-section.right_margin = Inches(1)
+section.top_margin = Cm(0)      # Верхнее поле 0 см
+section.bottom_margin = Cm(0)   # Нижнее поле 0 см
+section.left_margin = Cm(2.5)   # Левое поле 2,5 см
+section.right_margin = Cm(2.5)  # Правое поле 2,5 см
 
 # ========== НАСТРОЙКА КОЛОНТИТУЛОВ ==========
 setup_footer(doc)
