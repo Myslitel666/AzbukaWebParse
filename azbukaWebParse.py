@@ -1,71 +1,93 @@
 import os
 import subprocess
+import time
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
-from docx.enum.section import WD_ORIENTATION
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 import requests
 from bs4 import BeautifulSoup
 
-# URL страницы
+# URL страницы с оглавлением
 url = "https://azbyka.ru/otechnik/Ioann_Kassian_Rimljanin/pisaniya_k_desyati/"
 
-# Заголовки, чтобы имитировать браузер
 headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
 }
 
-# Получаем HTML страницы
-print("Загружаю страницу...")
-response = requests.get(url, headers=headers)
+print("Загружаю оглавление...")
+response = requests.get(url, headers=headers, timeout=30)
 response.encoding = 'utf-8'
-
-# Парсим HTML
 soup = BeautifulSoup(response.text, 'html.parser')
 
-# Ищем все ссылки на главы
-links = soup.find_all('a', href=True)
+# Находим все ссылки на собеседования (с классом h2o)
+conversations = []
+for span in soup.find_all('span', class_='h2o'):
+    link = span.find_parent('a')
+    if link and link.get('href', '').startswith('./'):
+        href = link.get('href')
+        title = span.get_text(strip=True)
+        full_url = f"https://azbyka.ru/otechnik/Ioann_Kassian_Rimljanin/pisaniya_k_desyati/{href[2:]}"
+        conversations.append({
+            'number': href[2:],
+            'title': title,
+            'url': full_url
+        })
 
-# Собираем ссылки в список с определением уровня
-chapters = []
-for link in links:
-    href = link.get('href', '')
-    # Получаем класс ссылки
-    span = link.find('span')
-    if span:
-        span_class = span.get('class', [])
-        span_class = span_class[0] if span_class else ''
-    else:
-        span_class = ''
-    
-    text = link.get_text(strip=True)
-    
-    # Проверяем, что это ссылка на главу
-    if (href.startswith('./') and href[2:].isdigit()) or \
-       (href.startswith('./') and '_' in href and href[2:].split('_')[0].isdigit()) or \
-       (href.startswith('#') and href[1:].isdigit()):
+print(f"Найдено собеседований: {len(conversations)}")
+
+# ========== ФУНКЦИЯ ДЛЯ ПАРСИНГА ОДНОГО СОБЕСЕДОВАНИЯ ==========
+def parse_conversation(conv_url):
+    """Загружает страницу собеседования и парсит все главы с текстом"""
+    try:
+        print(f"  Загружаю: {conv_url}")
+        response = requests.get(conv_url, headers=headers, timeout=30)
+        response.encoding = 'utf-8'
+        soup = BeautifulSoup(response.text, 'html.parser')
         
-        if text:
-            # Определяем уровень заголовка
-            if span_class == 'h2o':
-                level = 1  # Заголовок 1 уровня (основные собеседования)
-            elif span_class == 'h3o':
-                level = 2  # Заголовок 2 уровня (главы внутри собеседований)
-            else:
-                level = 0  # Другое (например, введение)
+        chapters = []
+        
+        # Находим все h2 с классом text-center (заголовки глав)
+        headings = soup.find_all('h2', class_='text-center')
+        print(f"    Найдено заголовков h2: {len(headings)}")
+        
+        for i, heading in enumerate(headings):
+            chapter_title = heading.get_text(strip=True).replace('\n', ' ').strip()
+            print(f"    Заголовок {i+1}: {chapter_title[:60]}...")
             
-            chapters.append({
-                'href': href,
-                'title': text,
-                'level': level,
-                'class': span_class
-            })
-
-print(f"Найдено элементов: {len(chapters)}")
-print(f"Из них:")
-print(f"  - Заголовки 1 уровня (h2o): {len([c for c in chapters if c['level'] == 1])}")
-print(f"  - Заголовки 2 уровня (h3o): {len([c for c in chapters if c['level'] == 2])}")
-print(f"  - Прочее: {len([c for c in chapters if c['level'] == 0])}")
+            # Ищем следующий div (без класса) после заголовка
+            # В структуре: <h2>...</h2> -> <div> -> <p class="txt">...</p>
+            next_div = heading.find_next_sibling('div')
+            
+            chapter_text = []
+            if next_div:
+                # Ищем внутри div все p с классом txt
+                paragraphs = next_div.find_all('p', class_='txt')
+                if paragraphs:
+                    for p in paragraphs:
+                        text = p.get_text(strip=True)
+                        if text:
+                            chapter_text.append(text)
+                else:
+                    # Если нет p, берем текст из div
+                    text = next_div.get_text(strip=True)
+                    if text:
+                        chapter_text.append(text)
+            
+            if chapter_text:
+                chapters.append({
+                    'title': chapter_title,
+                    'content': chapter_text
+                })
+                print(f"      Добавлена глава, абзацев: {len(chapter_text)}")
+            else:
+                print(f"      Нет текста для этой главы")
+        
+        return chapters
+        
+    except Exception as e:
+        print(f"    Ошибка при загрузке {conv_url}: {e}")
+        return []
 
 # ========== ПРОВЕРКА И ЗАКРЫТИЕ ФАЙЛА ==========
 file_name = 'оформленный_документ.docx'
@@ -79,12 +101,10 @@ if os.path.exists(file_name):
         print('Пожалуйста, закройте файл в Word и нажмите Enter...')
         input()
         os.remove(file_name)
-        print(f'Файл "{file_name}" удалён')
+        print(f'Старый файл удалён')
 
 # ========== СОЗДАЁМ ДОКУМЕНТ ==========
-print('Создаю документ...')
-
-# Создаём документ
+print('\nСоздаю документ...')
 doc = Document()
 
 # ========== НАСТРОЙКА ПОЛЕЙ ==========
@@ -94,91 +114,94 @@ section.bottom_margin = Inches(1)
 section.left_margin = Inches(1)
 section.right_margin = Inches(1)
 
-# Отключаем разрыв страницы перед заголовками
-section.start_type = 1  # WD_SECTION_START.NEW_PAGE = 1, но мы оставляем как есть
-
-# ========== ДОБАВЛЯЕМ ЗАГОЛОВОК ДОКУМЕНТА ==========
-main_title = doc.add_heading('Содержание книги "Писания к десяти"', level=1)
+# ========== ЗАГОЛОВОК ДОКУМЕНТА ==========
+main_title = doc.add_heading('Писания к десяти', level=1)
 main_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-# Отключаем разрыв страницы после заголовка
-main_title.paragraph_format.keep_with_next = True
 main_title.paragraph_format.page_break_before = False
 
 for run in main_title.runs:
     run.font.size = Pt(24)
     run.font.name = 'Arial Narrow'
     run.font.bold = True
-    run.font.color.rgb = RGBColor(0, 0, 0)  # Чёрный цвет
+    run.font.color.rgb = RGBColor(0, 0, 0)
 
-# ========== ДОБАВЛЯЕМ СПИСОК ГЛАВ ==========
+# Подзаголовок
+subtitle = doc.add_heading('Собеседования преподобного Иоанна Кассиана Римлянина', level=2)
+subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
+subtitle.paragraph_format.page_break_before = False
 
-# Добавляем пустую строку для отступа
-paragraph = doc.add_paragraph()
-paragraph.paragraph_format.keep_with_next = False
-paragraph.paragraph_format.page_break_before = False
+for run in subtitle.runs:
+    run.font.size = Pt(14)
+    run.font.name = 'Arial Narrow'
+    run.font.italic = True
+    run.font.color.rgb = RGBColor(0, 0, 0)
 
-# Перебираем все найденные главы и добавляем их в документ
-for chapter in chapters:
-    title = chapter['title']
-    level = chapter['level']
-    
-    if level == 1:
-        # Заголовок 1 уровня (основное собеседование) - h2o
-        heading = doc.add_heading(title, level=1)
-        # Отключаем разрыв страницы перед заголовком
-        heading.paragraph_format.page_break_before = False
-        heading.paragraph_format.keep_with_next = False
-        
-        for run in heading.runs:
-            run.font.size = Pt(18)
-            run.font.name = 'Arial Narrow'
-            run.font.bold = True
-            run.font.color.rgb = RGBColor(0, 0, 0)  # Чёрный цвет
-        
-    elif level == 2:
-        # Заголовок 2 уровня (глава внутри собеседования) - h3o
-        heading = doc.add_heading(title, level=2)
-        heading.paragraph_format.page_break_before = False
-        heading.paragraph_format.keep_with_next = False
-        
-        for run in heading.runs:
-            run.font.size = Pt(14)
-            run.font.name = 'Arial Narrow'
-            run.font.bold = True
-            run.font.color.rgb = RGBColor(0, 0, 0)  # Чёрный цвет
-            
-    else:
-        # Прочее (например, введение) - заголовок 2 уровня с курсивом
-        heading = doc.add_heading(title, level=2)
-        heading.paragraph_format.page_break_before = False
-        heading.paragraph_format.keep_with_next = False
-        
-        for run in heading.runs:
-            run.font.size = Pt(14)
-            run.font.name = 'Arial Narrow'
-            run.font.bold = True
-            run.font.italic = True
-            run.font.color.rgb = RGBColor(0, 0, 0)  # Чёрный цвет
-
-# Добавляем информацию в конце
 doc.add_paragraph()
-footer_paragraph = doc.add_paragraph(f'Всего добавлено элементов: {len(chapters)}')
+
+# ========== ПАРСИМ КАЖДОЕ СОБЕСЕДОВАНИЕ ==========
+total_chapters = 0
+
+for conv in conversations:
+    print(f"\nОбрабатываю: {conv['title']}")
+    
+    # Заголовок собеседования (уровень 1)
+    conv_heading = doc.add_heading(conv['title'], level=1)
+    conv_heading.paragraph_format.page_break_before = False
+    
+    for run in conv_heading.runs:
+        run.font.size = Pt(18)
+        run.font.name = 'Arial Narrow'
+        run.font.bold = True
+        run.font.color.rgb = RGBColor(0, 0, 0)
+    
+    # Парсим главы этого собеседования
+    chapters = parse_conversation(conv['url'])
+    print(f"  Найдено глав с текстом: {len(chapters)}")
+    
+    # Добавляем каждую главу в документ
+    for chapter in chapters:
+        # Заголовок главы (уровень 2)
+        chapter_heading = doc.add_heading(chapter['title'], level=2)
+        chapter_heading.paragraph_format.page_break_before = False
+        
+        for run in chapter_heading.runs:
+            run.font.size = Pt(14)
+            run.font.name = 'Arial Narrow'
+            run.font.bold = True
+            run.font.color.rgb = RGBColor(0, 0, 0)
+        
+        # Текст главы
+        for para_text in chapter['content']:
+            paragraph = doc.add_paragraph(para_text)
+            paragraph.paragraph_format.first_line_indent = Inches(0.3)
+            for run in paragraph.runs:
+                run.font.size = Pt(12)
+                run.font.name = 'Arial Narrow'
+                run.font.color.rgb = RGBColor(0, 0, 0)
+        
+        total_chapters += 1
+    
+    time.sleep(0.5)
+
+# ========== ИТОГО ==========
+doc.add_paragraph()
+footer_paragraph = doc.add_paragraph(f'Всего собеседований: {len(conversations)}, глав: {total_chapters}')
 footer_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-footer_paragraph.paragraph_format.page_break_before = False
 
 for run in footer_paragraph.runs:
     run.font.size = Pt(10)
     run.font.name = 'Arial Narrow'
     run.font.italic = True
-    run.font.color.rgb = RGBColor(0, 0, 0)  # Чёрный цвет
+    run.font.color.rgb = RGBColor(0, 0, 0)
 
-# ========== СОХРАНЯЕМ ДОКУМЕНТ ==========
+# ========== СОХРАНЯЕМ ==========
 doc.save(file_name)
 
-print(f'Документ "{file_name}" успешно создан!')
-print(f'Добавлено {len(chapters)} элементов')
+print(f'\nДокумент "{file_name}" успешно создан!')
+print(f'Собеседований: {len(conversations)}')
+print(f'Всего глав с текстом: {total_chapters}')
 
-# ========== ОТКРЫВАЕМ ФАЙЛ ==========
+# ========== ОТКРЫВАЕМ ==========
 try:
     if os.name == 'nt':
         os.startfile(file_name)
@@ -189,4 +212,3 @@ try:
     print(f'Файл "{file_name}" открыт')
 except Exception as e:
     print(f'Не удалось открыть файл автоматически: {e}')
-    print(f'Вы можете открыть его вручную: {os.path.abspath(file_name)}')
