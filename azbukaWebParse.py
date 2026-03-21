@@ -1,7 +1,7 @@
 import os
 import subprocess
 from docx import Document
-from docx.shared import Inches, Pt
+from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.section import WD_ORIENTATION
 import requests
@@ -102,15 +102,7 @@ for run in main_title.runs:
     run.font.size = Pt(24)
     run.font.name = 'Arial Narrow'
     run.font.bold = True
-
-# Добавляем подзаголовок
-subtitle = doc.add_heading('Собеседования и главы', level=2)
-subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-for run in subtitle.runs:
-    run.font.size = Pt(18)
-    run.font.name = 'Arial Narrow'
-    run.font.bold = True
+    run.font.color.rgb = RGBColor(0, 0, 0)  # Чёрный цвет
 
 # ========== ДОБАВЛЯЕМ СПИСОК ГЛАВ ==========
 
@@ -124,28 +116,31 @@ for chapter in chapters:
     
     if level == 1:
         # Заголовок 1 уровня (основное собеседование) - h2o
-        heading = doc.add_heading(title, level=2)  # Используем level=2 в docx, чтобы сохранить иерархию с главным заголовком
+        heading = doc.add_heading(title, level=1)
         for run in heading.runs:
-            run.font.size = Pt(16)
+            run.font.size = Pt(18)
             run.font.name = 'Arial Narrow'
             run.font.bold = True
+            run.font.color.rgb = RGBColor(0, 0, 0)  # Чёрный цвет
         
     elif level == 2:
         # Заголовок 2 уровня (глава внутри собеседования) - h3o
-        heading = doc.add_heading(title, level=3)  # Используем level=3 в docx для подзаголовков
+        heading = doc.add_heading(title, level=2)
         for run in heading.runs:
-            run.font.size = Pt(13)
+            run.font.size = Pt(14)
             run.font.name = 'Arial Narrow'
             run.font.bold = True
+            run.font.color.rgb = RGBColor(0, 0, 0)  # Чёрный цвет
             
     else:
-        # Прочее (например, введение) - обрабатываем как особый случай
+        # Прочее (например, введение) - заголовок 2 уровня с курсивом
         heading = doc.add_heading(title, level=2)
         for run in heading.runs:
             run.font.size = Pt(14)
             run.font.name = 'Arial Narrow'
             run.font.bold = True
             run.font.italic = True
+            run.font.color.rgb = RGBColor(0, 0, 0)  # Чёрный цвет
 
 # Добавляем информацию в конце
 doc.add_paragraph()
@@ -155,6 +150,7 @@ for run in footer_paragraph.runs:
     run.font.size = Pt(10)
     run.font.name = 'Arial Narrow'
     run.font.italic = True
+    run.font.color.rgb = RGBColor(0, 0, 0)  # Чёрный цвет
 
 # ========== СОХРАНЯЕМ ДОКУМЕНТ ==========
 doc.save(file_name)
