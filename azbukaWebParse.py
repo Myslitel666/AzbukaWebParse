@@ -2,13 +2,14 @@ import os
 import subprocess
 import time
 import json
+import asyncio
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.enum.section import WD_ORIENTATION
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-import requests
+import httpx
 from bs4 import BeautifulSoup
 
 # ========== ЗАГРУЗКА КОНФИГУРАЦИИ ==========
@@ -170,7 +171,6 @@ def add_formatted_paragraph(doc, p_element, text_config):
         if isinstance(child, str):
             # Обычный текст - добавляем как есть, сохраняя пробелы
             if child:
-                # Не используем strip(), чтобы сохранить пробелы
                 run = paragraph.add_run(child)
                 apply_font(run, text_config)
         elif child.name == 'b':
@@ -211,6 +211,49 @@ def add_formatted_paragraph(doc, p_element, text_config):
                 run = paragraph.add_run(text)
                 apply_font(run, text_config)
 
+# ========== АСИНХРОННЫЙ ПАРСИНГ ==========
+async def fetch_conversation(client, conv, text_config, doc):
+    """Асинхронно загружает одно собеседование и парсит главы"""
+    try:
+        print(f"  Загружаю: {conv['title']}")
+        response = await client.get(conv['url'])
+        response.encoding = 'utf-8'
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        chapters = []
+        headings = soup.find_all('h2', class_='text-center')
+        
+        for heading in headings:
+            chapter_title = heading.get_text(strip=True).replace('\n', ' ').strip()
+            next_div = heading.find_next_sibling('div')
+            
+            if next_div:
+                paragraphs = next_div.find_all('p', class_='txt')
+                
+                if paragraphs:
+                    chapters.append({
+                        'title': chapter_title,
+                        'paragraphs': paragraphs
+                    })
+        
+        return conv, chapters
+        
+    except Exception as e:
+        print(f"    Ошибка при загрузке {conv['url']}: {e}")
+        return conv, []
+
+async def fetch_all_conversations(conversations, text_config, doc):
+    """Асинхронно загружает все собеседования"""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    }
+    
+    async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
+        tasks = [fetch_conversation(client, conv, text_config, doc) for conv in conversations]
+        results = await asyncio.gather(*tasks)
+        return results
+
 def get_conversations():
     """Получает список собеседований с главной страницы"""
     headers = {
@@ -219,7 +262,7 @@ def get_conversations():
     }
     
     print("Загружаю оглавление...")
-    response = requests.get(config['url'], headers=headers, timeout=30)
+    response = httpx.get(config['url'], headers=headers, timeout=30)
     response.encoding = 'utf-8'
     soup = BeautifulSoup(response.text, 'html.parser')
     
@@ -237,41 +280,6 @@ def get_conversations():
             })
     
     return conversations
-
-def parse_conversation(conv_url, doc, text_config):
-    """Загружает страницу собеседования и парсит все главы с текстом и форматированием"""
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    }
-    
-    try:
-        print(f"  Загружаю: {conv_url}")
-        response = requests.get(conv_url, headers=headers, timeout=30)
-        response.encoding = 'utf-8'
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        chapters = []
-        headings = soup.find_all('h2', class_='text-center')
-        
-        for heading in headings:
-            chapter_title = heading.get_text(strip=True).replace('\n', ' ').strip()
-            next_div = heading.find_next_sibling('div')
-            
-            if next_div:
-                # Ищем все параграфы внутри div
-                paragraphs = next_div.find_all('p', class_='txt')
-                
-                if paragraphs:
-                    chapters.append({
-                        'title': chapter_title,
-                        'paragraphs': paragraphs
-                    })
-        
-        return chapters
-        
-    except Exception as e:
-        print(f"    Ошибка при загрузке {conv_url}: {e}")
-        return []
 
 # ========== ОСНОВНОЙ КОД ==========
 file_name = config['output_file']
@@ -322,12 +330,19 @@ add_table_of_contents(doc)
 conversations = get_conversations()
 print(f"Найдено собеседований: {len(conversations)}")
 
-# Парсим каждое собеседование
-total_chapters = 0
+# Асинхронно загружаем все собеседования
+print("\nЗагружаю собеседования параллельно...")
 text_config = config['fonts']['text']
 
-for conv in conversations:
+# Запускаем асинхронную загрузку
+results = asyncio.run(fetch_all_conversations(conversations, text_config, doc))
+
+# Добавляем главы в документ
+total_chapters = 0
+
+for conv, chapters in results:
     print(f"\nОбрабатываю: {conv['title']}")
+    print(f"  Найдено глав с текстом: {len(chapters)}")
     
     # Заголовок собеседования (уровень 1)
     conv_heading = doc.add_heading(conv['title'], level=1)
@@ -336,10 +351,6 @@ for conv in conversations:
     
     for run in conv_heading.runs:
         apply_font(run, config['fonts']['conversation'])
-    
-    # Парсим главы
-    chapters = parse_conversation(conv['url'], doc, text_config)
-    print(f"  Найдено глав с текстом: {len(chapters)}")
     
     # Добавляем главы
     for chapter in chapters:
@@ -356,8 +367,6 @@ for conv in conversations:
             add_formatted_paragraph(doc, p, text_config)
         
         total_chapters += 1
-    
-    time.sleep(0.5)
 
 # Сохраняем
 doc.save(file_name)
