@@ -266,13 +266,19 @@ def get_conversations():
     response.encoding = 'utf-8'
     soup = BeautifulSoup(response.text, 'html.parser')
     
+    # Получаем базовый URL
+    base_url = config['url']
+    if base_url.endswith('/'):
+        base_url = base_url[:-1]
+    
     conversations = []
     for span in soup.find_all('span', class_='h2o'):
         link = span.find_parent('a')
         if link and link.get('href', '').startswith('./'):
             href = link.get('href')
             title = span.get_text(strip=True)
-            full_url = f"https://azbyka.ru/otechnik/Ioann_Kassian_Rimljanin/pisaniya_k_desyati/{href[2:]}"
+            # Формируем полный URL на основе базового
+            full_url = f"{base_url}{href[1:]}"  # href начинается с './', убираем точку
             conversations.append({
                 'number': href[2:],
                 'title': title,
