@@ -149,25 +149,48 @@ def fetch_conversation(conv, text_config):
         soup = BeautifulSoup(r.text, 'html.parser')
         
         chapters = []
+        is_fallback = False
+
+        # ===== ОСНОВНОЙ СЦЕНАРИЙ =====
         headings = soup.find_all('h2', class_='text-center')
-        
-        for h in headings:
-            title = h.get_text(strip=True)
-            div = h.find_next_sibling('div')
+
+        if headings:
+            for h in headings:
+                title = h.get_text(strip=True)
+                div = h.find_next_sibling('div')
+                
+                if div:
+                    paragraphs = div.find_all('p', class_='txt')
+                    if paragraphs:
+                        chapters.append({
+                            'title': title,
+                            'paragraphs': paragraphs
+                        })
+
+        # ===== FALLBACK =====
+        else:
+            h1 = soup.find('h1')
             
-            if div:
-                paragraphs = div.find_all('p', class_='txt')
-                if paragraphs:
-                    chapters.append({
-                        'title': title,
-                        'paragraphs': paragraphs
-                    })
-        
-        return conv, chapters
+            if h1:
+                is_fallback = True
+                title = h1.get_text(separator=' ', strip=True)
+                
+                div = h1.find_next_sibling('div')
+                
+                if div:
+                    paragraphs = div.find_all('p', class_='txt')
+                    
+                    if paragraphs:
+                        chapters.append({
+                            'title': title,
+                            'paragraphs': paragraphs
+                        })
+
+        return conv, chapters, is_fallback
     
     except Exception as e:
         print(f"Ошибка: {e}")
-        return conv, []
+        return conv, [], False
 
 def fetch_all(conversations, text_config):
     results = [None] * len(conversations)
@@ -256,24 +279,34 @@ results = fetch_all(conversations, config['fonts']['text'])
 
 total = 0
 
-for conv, chapters in results:
+for conv, chapters, is_fallback in results:
     h = doc.add_heading(conv['title'], 1)
     h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    
+
     for run in h.runs:
         apply_font(run, config['fonts']['conversation'])
-    
-    for ch in chapters:
-        h2 = doc.add_heading(ch['title'], 2)
-        h2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        for run in h2.runs:
-            apply_font(run, config['fonts']['chapter'])
-        
-        for p in ch['paragraphs']:
-            add_formatted_paragraph(doc, p, config['fonts']['text'])
-        
-        total += 1
+
+    # ===== ЕСЛИ fallback =====
+    if is_fallback:
+        for ch in chapters:
+            # НЕ создаём h2
+            for p in ch['paragraphs']:
+                add_formatted_paragraph(doc, p, config['fonts']['text'])
+            total += 1
+
+    # ===== ЕСЛИ нормальная структура =====
+    else:
+        for ch in chapters:
+            h2 = doc.add_heading(ch['title'], 2)
+            h2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            
+            for run in h2.runs:
+                apply_font(run, config['fonts']['chapter'])
+            
+            for p in ch['paragraphs']:
+                add_formatted_paragraph(doc, p, config['fonts']['text'])
+            
+            total += 1
 
 doc.save(file_name)
 
