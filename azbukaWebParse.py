@@ -186,6 +186,7 @@ def get_conversations():
     return conversations
 
 def parse_conversation(conv_url):
+    """Загружает страницу собеседования и парсит все главы с текстом"""
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
@@ -205,14 +206,20 @@ def parse_conversation(conv_url):
             
             chapter_text = []
             if next_div:
+                # Ищем все параграфы внутри div
                 paragraphs = next_div.find_all('p', class_='txt')
-                if paragraphs:
-                    for p in paragraphs:
-                        text = p.get_text(strip=True)
-                        if text:
-                            chapter_text.append(text)
-                else:
-                    text = next_div.get_text(strip=True)
+                
+                for p in paragraphs:
+                    # Заменяем <br> на пробелы
+                    for br in p.find_all('br'):
+                        br.replace_with(' ')
+                    
+                    # Получаем текст, вставляя пробелы между элементами
+                    # Используем get_text() с разделителем пробелом
+                    # Но сначала удаляем все лишние пробелы
+                    text = p.get_text()
+                    # Заменяем множественные пробелы на один
+                    text = ' '.join(text.split())
                     if text:
                         chapter_text.append(text)
             
