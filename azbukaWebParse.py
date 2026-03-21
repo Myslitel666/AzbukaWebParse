@@ -2,7 +2,7 @@ import os
 import subprocess
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.enum.section import WD_ORIENTATION
 import requests
 from bs4 import BeautifulSoup
@@ -94,9 +94,15 @@ section.bottom_margin = Inches(1)
 section.left_margin = Inches(1)
 section.right_margin = Inches(1)
 
+# Отключаем разрыв страницы перед заголовками
+section.start_type = 1  # WD_SECTION_START.NEW_PAGE = 1, но мы оставляем как есть
+
 # ========== ДОБАВЛЯЕМ ЗАГОЛОВОК ДОКУМЕНТА ==========
 main_title = doc.add_heading('Содержание книги "Писания к десяти"', level=1)
 main_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+# Отключаем разрыв страницы после заголовка
+main_title.paragraph_format.keep_with_next = True
+main_title.paragraph_format.page_break_before = False
 
 for run in main_title.runs:
     run.font.size = Pt(24)
@@ -107,7 +113,9 @@ for run in main_title.runs:
 # ========== ДОБАВЛЯЕМ СПИСОК ГЛАВ ==========
 
 # Добавляем пустую строку для отступа
-doc.add_paragraph()
+paragraph = doc.add_paragraph()
+paragraph.paragraph_format.keep_with_next = False
+paragraph.paragraph_format.page_break_before = False
 
 # Перебираем все найденные главы и добавляем их в документ
 for chapter in chapters:
@@ -117,6 +125,10 @@ for chapter in chapters:
     if level == 1:
         # Заголовок 1 уровня (основное собеседование) - h2o
         heading = doc.add_heading(title, level=1)
+        # Отключаем разрыв страницы перед заголовком
+        heading.paragraph_format.page_break_before = False
+        heading.paragraph_format.keep_with_next = False
+        
         for run in heading.runs:
             run.font.size = Pt(18)
             run.font.name = 'Arial Narrow'
@@ -126,6 +138,9 @@ for chapter in chapters:
     elif level == 2:
         # Заголовок 2 уровня (глава внутри собеседования) - h3o
         heading = doc.add_heading(title, level=2)
+        heading.paragraph_format.page_break_before = False
+        heading.paragraph_format.keep_with_next = False
+        
         for run in heading.runs:
             run.font.size = Pt(14)
             run.font.name = 'Arial Narrow'
@@ -135,6 +150,9 @@ for chapter in chapters:
     else:
         # Прочее (например, введение) - заголовок 2 уровня с курсивом
         heading = doc.add_heading(title, level=2)
+        heading.paragraph_format.page_break_before = False
+        heading.paragraph_format.keep_with_next = False
+        
         for run in heading.runs:
             run.font.size = Pt(14)
             run.font.name = 'Arial Narrow'
@@ -146,6 +164,8 @@ for chapter in chapters:
 doc.add_paragraph()
 footer_paragraph = doc.add_paragraph(f'Всего добавлено элементов: {len(chapters)}')
 footer_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+footer_paragraph.paragraph_format.page_break_before = False
+
 for run in footer_paragraph.runs:
     run.font.size = Pt(10)
     run.font.name = 'Arial Narrow'
