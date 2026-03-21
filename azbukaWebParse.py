@@ -4,6 +4,50 @@ from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.section import WD_ORIENTATION
+import requests
+from bs4 import BeautifulSoup
+
+import requests
+from bs4 import BeautifulSoup
+
+# URL страницы
+url = "https://azbyka.ru/otechnik/Ioann_Kassian_Rimljanin/pisaniya_k_desyati/"
+
+# Заголовки, чтобы имитировать браузер (некоторые сайты блокируют ботов)
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+}
+
+# Получаем HTML страницы
+response = requests.get(url, headers=headers)
+response.encoding = 'utf-8'  # Явно указываем кодировку
+
+# Парсим HTML
+soup = BeautifulSoup(response.text, 'html.parser')
+
+# Ищем все ссылки, которые ведут на главы (href начинается с './' или '#')
+# По HTML-коду видно, что ссылки имеют формат href="./1", href="./1_1", href="#0_1" и т.д.
+links = soup.find_all('a', href=True)
+
+# Выводим все ссылки, которые содержат в href признаки глав
+print("=" * 80)
+print("Ссылки на главы:")
+print("=" * 80)
+
+for link in links:
+    href = link.get('href', '')
+    # Проверяем, что это ссылка на главу (начинается с ./ или # и содержит цифры)
+    if (href.startswith('./') and href[2:].isdigit()) or \
+       (href.startswith('./') and '_' in href and href[2:].split('_')[0].isdigit()) or \
+       (href.startswith('#') and href[1:].isdigit()):
+        
+        # Получаем текст ссылки (название главы)
+        text = link.get_text(strip=True)
+        if text:  # Если текст не пустой
+            print(f"{href} -> {text}")
+
+print("=" * 80)
+print("Всего найдено ссылок:", len([l for l in links if (l.get('href', '').startswith('./') or l.get('href', '').startswith('#')) and l.get_text(strip=True)]))
 
 # ========== ПРОВЕРКА И ЗАКРЫТИЕ ФАЙЛА ==========
 file_name = 'оформленный_документ.docx'
