@@ -86,14 +86,10 @@ def add_formatted_paragraph(doc, p_element, text_config):
     
     fragments = process_footnotes_in_text(p_element, text_config)
     
-    last_text = ""
+    # Просто добавляем фрагменты как есть, без дополнительных пробелов
     for text, fmt, note_num in fragments:
         if not text:
             continue
-        
-        if last_text and last_text[-1].isalpha() and text[0].isalpha():
-            run = paragraph.add_run(" ")
-            apply_font(run, text_config)
         
         run = paragraph.add_run(text)
         apply_font(run, text_config)
@@ -104,8 +100,6 @@ def add_formatted_paragraph(doc, p_element, text_config):
             run.italic = True
         elif fmt == 'superscript':
             run.font.superscript = True
-        
-        last_text = text
 
 def add_notes_section(doc, notes):
     if not notes:

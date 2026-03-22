@@ -13,7 +13,14 @@ def fetch_conversation(conv, text_config):
         r = session.get(conv['url'], headers=HEADERS, timeout=30)
         r.encoding = 'utf-8'
         
-        soup = BeautifulSoup(r.text, 'html.parser')
+        # Удаляем все переносы строк из HTML
+        html_content = r.text
+        # Заменяем переносы строк на пробелы
+        html_content = html_content.replace('\n', ' ')
+        # Убираем множественные пробелы
+        html_content = re.sub(r' +', ' ', html_content)
+        
+        soup = BeautifulSoup(html_content, 'html.parser')
         
         chapters = []
         is_fallback = False
@@ -26,16 +33,14 @@ def fetch_conversation(conv, text_config):
 
         current_chapter = None
         intro_paragraphs = []
-        notes = []  # Собираем примечания для этой главы
+        notes = []
 
         while True:
             node = node.find_next()
             if not node:
                 break
 
-            # ===== ВСТРЕТИЛИ H2 =====
             if node.name == 'h2' and 'text-center' in node.get('class', []):
-                # Сохраняем элемент целиком для обработки сносок
                 current_chapter = {
                     'title': node.get_text(strip=True),
                     'element': node,
@@ -44,7 +49,6 @@ def fetch_conversation(conv, text_config):
                 chapters.append(current_chapter)
                 continue
 
-            # ===== ПАРАГРАФ =====
             if node.name == 'p' and 'txt' in node.get('class', []):
                 if current_chapter is None:
                     intro_paragraphs.append(node)
@@ -52,19 +56,7 @@ def fetch_conversation(conv, text_config):
                     current_chapter['paragraphs'].append(node)
                 continue
             
-            # ===== ОБРАБОТКА ПРИМЕЧАНИЙ =====
-            # Ищем разделитель * * *
-            if node.name == 'p' and 'after-text-vignette' in node.get('class', []):
-                # Это разделитель перед примечаниями
-                continue
-            
-            # Ищем заголовок "Примечания"
-            if node.name == 'p' and node.get('class') == ['h2'] and node.get_text(strip=True) == 'Примечания':
-                continue
-            
-            # Ищем блоки с примечаниями
             if node.name == 'div' and 'note' in node.get('class', []):
-                # Находим номер сноски
                 sup_link = node.find('sup')
                 note_number = None
                 if sup_link:
@@ -73,10 +65,8 @@ def fetch_conversation(conv, text_config):
                     if match:
                         note_number = match.group(1)
                 
-                # Находим текст примечания
                 note_p = node.find('p', class_='txt')
                 if note_p and note_number:
-                    # Обрабатываем текст примечания с возможным форматированием
                     note_fragments = []
                     for child in note_p.children:
                         if isinstance(child, str):

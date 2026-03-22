@@ -1,5 +1,5 @@
 {
-    "url": "https://azbyka.ru/otechnik/Ioann_Kassian_Rimljanin/pisaniya_k_desyati/",
+    "url": "https://azbyka.ru/otechnik/Tihon_Zadonskij/sokrovische_duhovnoe/",
     "output_file": "оформленный_документ.docx",
     "font_name": "Arial Narrow",
     "margins": {
@@ -34,7 +34,7 @@
             "color_rgb": [0, 0, 0]
         },
         "text": {
-            "size_pt": 14,
+            "size_pt": 12,
             "bold": false,
             "italic": false,
             "color_rgb": [0, 0, 0],
