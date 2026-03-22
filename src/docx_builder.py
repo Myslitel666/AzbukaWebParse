@@ -121,6 +121,9 @@ def add_formatted_paragraph(doc, p_element, text_config):
     
     if has_podpis:
         paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    # Проверяем, является ли параграф тезисом (h6)
+    is_h6 = 'h6' in p_element.get('class', [])
     
     for text, fmt, note_num, is_podpis in fragments:
         if not text:
@@ -131,7 +134,7 @@ def add_formatted_paragraph(doc, p_element, text_config):
         
         if fmt == 'bold':
             run.bold = True
-        elif fmt == 'italic' or is_podpis:
+        elif fmt == 'italic' or is_podpis or is_h6:
             run.italic = True
         elif fmt == 'superscript':
             run.font.superscript = True
