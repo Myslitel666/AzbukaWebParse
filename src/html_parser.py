@@ -38,7 +38,7 @@ def parse_note(node, notes):
 def fetch_single_page_conversation(conv, text_config):
     """Парсит страницу, где все главы на одной странице (письма)"""
     try:
-        print(f"  Загружаю: {conv['title']}")
+        print(f"  Загружаю: {conv['title'] if conv['title'] else 'одностраничник'}")
         
         r = session.get(conv['url'], headers=HEADERS, timeout=30)
         r.encoding = 'utf-8'
@@ -58,82 +58,70 @@ def fetch_single_page_conversation(conv, text_config):
         if not book_div:
             return conv, [], False, []
         
-        # Находим все заголовки h2 с классом text-center (это письма/главы)
-        h2_tags = book_div.find_all('h2', class_='text-center')
+        # Находим все заголовки h2
+        all_h2 = book_div.find_all('h2')
         
-        if not h2_tags:
-            # Нет глав - весь текст как одна глава
-            all_paragraphs = book_div.find_all('p', class_='txt')
-            if all_paragraphs:
-                chapters.append({
-                    'title': conv['title'],
-                    'element': None,
-                    'paragraphs': all_paragraphs
-                })
-            return conv, chapters, True, notes
+        # Отделяем служебные заголовки (От издателей) от основных (text-center)
+        service_h2 = []
+        chapters_h2 = []
         
-        # ===== ПРОПУСКАЕМ НЕНУЖНЫЕ ЭЛЕМЕНТЫ В НАЧАЛЕ =====
-        # Ищем первый реальный заголовок (h2) и пропускаем всё, что до него
-        first_h2 = h2_tags[0]
+        for h2 in all_h2:
+            classes = h2.get('class', [])
+            if 'title' in classes and 'h2' in classes:
+                service_h2.append(h2)  # "От издателей"
+            elif 'text-center' in classes:
+                chapters_h2.append(h2)  # Письма
         
-        # Теперь ищем элемент "От издателей" - это h2 с классом "title h2"
-        # Он должен быть до первого h2 с text-center
-        издатели_h2 = None
-        for elem in book_div.find_all():
-            if elem.name == 'h2' and 'title' in elem.get('class', []) and 'h2' in elem.get('class', []):
-                if elem.get_text(strip=True) == 'От издателей':
-                    издатели_h2 = elem
-                    break
-        
-        # Собираем вступительные параграфы ТОЛЬКО от издателей
-        intro_paragraphs = []
-        if издатели_h2:
-            # Начинаем с издатели_h2 и собираем его параграфы
-            node = издатели_h2.find_next()
-            while node and node != first_h2:
-                if node.name == 'p' and 'txt' in node.get('class', []):
-                    intro_paragraphs.append(node)
-                node = node.find_next()
-        
-        # Добавляем вступительную главу (без заголовка)
-        if intro_paragraphs:
-            chapters.append({
-                'title': '',
-                'element': None,
-                'paragraphs': intro_paragraphs
-            })
-        
-        # Теперь собираем каждое письмо/главу, начиная с first_h2
-        for i, h2 in enumerate(h2_tags):
-            # Пропускаем, если это "От издателей" (он уже обработан)
-            if 'title' in h2.get('class', []) and h2.get_text(strip=True) == 'От издателей':
-                continue
+        # 1. Обрабатываем "От издателей" как отдельную главу с заголовком
+        if service_h2:
+            izdateli = service_h2[0]
+            izdateli_chapter = {
+                'title': izdateli.get_text(strip=True),  # "От издателей"
+                'element': izdateli,
+                'paragraphs': []
+            }
             
+            node = izdateli.find_next()
+            while node:
+                # Останавливаемся перед первым письмом
+                if node in chapters_h2:
+                    break
+                # Собираем параграфы
+                if node.name == 'p' and 'txt' in node.get('class', []):
+                    # Пропускаем параграфы, которые содержат только цифры
+                    text = node.get_text(strip=True)
+                    if not re.match(r'^[\d\s]+$', text):
+                        izdateli_chapter['paragraphs'].append(node)
+                node = node.find_next()
+            
+            if izdateli_chapter['paragraphs']:
+                chapters.append(izdateli_chapter)
+        
+        # 2. Обрабатываем письма
+        for h2 in chapters_h2:
             current_chapter = {
                 'title': h2.get_text(strip=True),
                 'element': h2,
                 'paragraphs': []
             }
             
-            # Собираем параграфы до следующего h2
             node = h2.find_next()
             while node:
-                # Если нашли следующий h2 - останавливаемся
                 if node.name == 'h2':
                     break
-                # Если нашли примечание - парсим отдельно
                 if node.name == 'div' and 'note' in node.get('class', []):
                     parse_note(node, notes)
                     node = node.find_next()
                     continue
-                # Если нашли параграф - добавляем
                 if node.name == 'p' and 'txt' in node.get('class', []):
-                    current_chapter['paragraphs'].append(node)
+                    text = node.get_text(strip=True)
+                    if not re.match(r'^[\d\s]+$', text):
+                        current_chapter['paragraphs'].append(node)
                 node = node.find_next()
             
             chapters.append(current_chapter)
         
-        # Парсим оставшиеся примечания
+        # 3. Парсим примечания
         for note_div in book_div.find_all('div', class_='note'):
             sup_link = note_div.find('sup')
             if sup_link:
@@ -192,15 +180,20 @@ def fetch_conversation(conv, text_config):
                 chapters.append(current_chapter)
                 continue
 
-            if node.name == 'p' and 'txt' in node.get('class', []):
-                if current_chapter is None:
-                    intro_paragraphs.append(node)
-                else:
-                    current_chapter['paragraphs'].append(node)
-                continue
-            
+            # Пропускаем div с примечаниями - они будут обработаны отдельно
             if node.name == 'div' and 'note' in node.get('class', []):
                 parse_note(node, notes)
+                continue
+
+            # Собираем только обычные параграфы (не из примечаний)
+            if node.name == 'p' and 'txt' in node.get('class', []):
+                # Проверяем, не находится ли этот параграф внутри div.note
+                parent = node.find_parent('div', class_='note')
+                if not parent:  # Если не внутри примечания
+                    if current_chapter is None:
+                        intro_paragraphs.append(node)
+                    else:
+                        current_chapter['paragraphs'].append(node)
                 continue
 
         if intro_paragraphs:
@@ -273,7 +266,7 @@ def get_conversations():
             print(f"Найдено {chapters_count} глав на одной странице (одностраничник)")
             # Получаем заголовок книги
             h1 = book_div.find('h1')
-            title = h1.get_text(strip=True) if h1 else config.get('book_title', 'Книга')
+            title = h1.get_text(strip=True) if h1 else config.get('book_title', '')
             
             conversations.append({
                 'title': title,

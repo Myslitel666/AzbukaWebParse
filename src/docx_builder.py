@@ -9,9 +9,15 @@ def process_footnotes_in_text(element, text_config):
     """Обрабатывает элемент и возвращает список фрагментов с форматированием"""
     fragments = []
     
+    def get_text_content(node):
+        """Получает текстовое содержимое узла (рекурсивно)"""
+        if isinstance(node, str):
+            return node
+        return node.get_text()
+    
     def process_node(node, default_format='normal'):
         if isinstance(node, str):
-            if node.strip():
+            if node:
                 fragments.append((node, default_format, None))
             return
         
@@ -49,8 +55,36 @@ def process_footnotes_in_text(element, text_config):
         if node.name == 'b':
             current_format = 'bold'
         
-        for child in node.children:
+        # Обрабатываем детей
+        children = list(node.children)
+        for i, child in enumerate(children):
             process_node(child, current_format)
+            
+            # Проверяем, нужно ли добавить пробел между элементами
+            if i < len(children) - 1:
+                # Получаем тексты текущего и следующего элемента
+                current_text = get_text_content(child).strip()
+                next_text = get_text_content(children[i + 1]).strip()
+                
+                # Проверяем, что оба не пустые
+                if current_text and next_text:
+                    # Проверяем последний символ текущего и первый следующего
+                    last_char = current_text[-1]
+                    first_char = next_text[0]
+                    
+                    # Добавляем пробел ТОЛЬКО если:
+                    # 1. Оба - буквы или цифры
+                    # 2. Последний символ не является знаком препинания
+                    # 3. Первый символ не является знаком препинания или кавычкой
+                    should_add_space = (
+                        last_char.isalnum() and 
+                        first_char.isalnum() and
+                        last_char not in '.,!?;:)]»' and
+                        first_char not in '.,!?;:([«'
+                    )
+                    
+                    if should_add_space:
+                        fragments.append((' ', default_format, None))
     
     process_node(element)
     return fragments
