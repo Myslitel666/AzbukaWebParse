@@ -1,7 +1,6 @@
 import os
-import subprocess
-import time
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from docx import Document
@@ -117,26 +116,115 @@ def add_table_of_contents(doc):
     
     doc.add_page_break()
 
+def process_footnotes_in_text(element, text_config, is_heading=False):
+    """Обрабатывает элемент и возвращает список фрагментов с форматированием"""
+    fragments = []
+    
+    def process_node(node):
+        if isinstance(node, str):
+            if node.strip():
+                fragments.append((node, 'normal', None))
+            return
+        
+        # Обработка ссылки на сноску
+        if node.name == 'a' and node.get('href', '').startswith('#note'):
+            note_text = node.get_text(strip=True)
+            match = re.search(r'(\d+)', note_text)
+            if match:
+                note_number = match.group(1)
+                fragments.append((note_number, 'superscript', None))
+            return
+        
+        # Обработка sup тега
+        if node.name == 'sup':
+            for child in node.children:
+                if child.name == 'a' and child.get('href', '').startswith('#note'):
+                    note_text = child.get_text(strip=True)
+                    match = re.search(r'(\d+)', note_text)
+                    if match:
+                        note_number = match.group(1)
+                        fragments.append((note_number, 'superscript', None))
+                else:
+                    text = child if isinstance(child, str) else child.get_text()
+                    if text:
+                        fragments.append((text, 'superscript', None))
+            return
+        
+        # Обработка жирного текста
+        if node.name == 'b':
+            for child in node.children:
+                process_node(child)
+                # Добавляем флаг bold к последним добавленным фрагментам
+                for i in range(len(fragments)):
+                    if fragments[i][1] == 'normal':
+                        fragments[i] = (fragments[i][0], 'bold', fragments[i][2])
+            return
+        
+        # Обработка курсивного текста
+        if node.name == 'span' and ('quote' in node.get('class', []) or 'synodal' in node.get('class', [])):
+            for child in node.children:
+                process_node(child)
+                for i in range(len(fragments)):
+                    if fragments[i][1] == 'normal':
+                        fragments[i] = (fragments[i][0], 'italic', fragments[i][2])
+            return
+        
+        # Обычная обработка для всех остальных тегов
+        for child in node.children:
+            process_node(child)
+    
+    process_node(element)
+    return fragments
+
+def add_heading_with_footnotes(doc, element, heading_level, font_config):
+    """Добавляет заголовок с возможными сносками"""
+    if heading_level == 1:
+        heading = doc.add_heading(level=1)
+    else:
+        heading = doc.add_heading(level=2)
+    
+    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # Обрабатываем текст заголовка со сносками
+    fragments = process_footnotes_in_text(element, font_config, is_heading=True)
+    
+    for text, fmt, note_num in fragments:
+        if not text:
+            continue
+        
+        run = heading.add_run(text)
+        apply_font(run, font_config)
+        
+        if fmt == 'bold':
+            run.bold = True
+        elif fmt == 'italic':
+            run.italic = True
+        elif fmt == 'superscript':
+            run.font.superscript = True
+            # Не меняем размер шрифта - superscript сам делает текст маленьким
+
 def add_formatted_paragraph(doc, p_element, text_config):
+    """Добавляет параграф с обработкой сносок"""
     paragraph = doc.add_paragraph()
     paragraph.paragraph_format.first_line_indent = Cm(text_config.get('first_line_indent_cm', 0.76))
     paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
-    for child in p_element.children:
-        text = child if isinstance(child, str) else child.get_text()
+    fragments = process_footnotes_in_text(p_element, text_config)
+    
+    for text, fmt, note_num in fragments:
         if not text:
             continue
         
         run = paragraph.add_run(text)
         apply_font(run, text_config)
         
-        if getattr(child, 'name', None) == 'b':
+        if fmt == 'bold':
             run.bold = True
-        
-        if getattr(child, 'name', None) == 'span':
-            classes = child.get('class', [])
-            if 'quote' in classes or 'synodal' in classes:
-                run.italic = True
+        elif fmt == 'italic':
+            run.italic = True
+        elif fmt == 'superscript':
+            run.font.superscript = True
+            # Не меняем размер шрифта - superscript сам делает текст маленьким
 
 # ========== ПАРСИНГ ==========
 def fetch_conversation(conv, text_config):
@@ -167,10 +255,10 @@ def fetch_conversation(conv, text_config):
 
             # ===== ВСТРЕТИЛИ H2 =====
             if node.name == 'h2' and 'text-center' in node.get('class', []):
-                title = node.get_text(strip=True)
-
+                # Сохраняем элемент целиком для обработки сносок
                 current_chapter = {
-                    'title': title,
+                    'title': node.get_text(strip=True),
+                    'element': node,
                     'paragraphs': []
                 }
                 chapters.append(current_chapter)
@@ -179,16 +267,15 @@ def fetch_conversation(conv, text_config):
             # ===== ПАРАГРАФ =====
             if node.name == 'p' and 'txt' in node.get('class', []):
                 
-                # если ещё не было ни одного h2 → это intro
                 if current_chapter is None:
                     intro_paragraphs.append(node)
                 else:
                     current_chapter['paragraphs'].append(node)
 
-        # ===== ЕСЛИ БЫЛ INTRO =====
         if intro_paragraphs:
             chapters.insert(0, {
-                'title': '',  # без заголовка
+                'title': '',
+                'element': None,
                 'paragraphs': intro_paragraphs
             })
 
@@ -240,8 +327,6 @@ def get_conversations():
 # ========== ОСНОВНОЙ КОД ==========
 file_name = config['output_file']
 
-file_name = config['output_file']
-
 while True:
     if not os.path.exists(file_name):
         break
@@ -286,28 +371,22 @@ results = fetch_all(conversations, config['fonts']['text'])
 total = 0
 
 for conv, chapters, is_fallback in results:
+    # Добавляем заголовок H1 (без сносок, так как они обычно в H2)
     h = doc.add_heading(conv['title'], 1)
     h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
     for run in h.runs:
         apply_font(run, config['fonts']['conversation'])
 
-    # ===== ЕСЛИ fallback =====
     if is_fallback:
         for ch in chapters:
-            # НЕ создаём h2
             for p in ch['paragraphs']:
                 add_formatted_paragraph(doc, p, config['fonts']['text'])
             total += 1
-
-    # ===== ЕСЛИ нормальная структура =====
     else:
         for ch in chapters:
-            h2 = doc.add_heading(ch['title'], 2)
-            h2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            
-            for run in h2.runs:
-                apply_font(run, config['fonts']['chapter'])
+            # Добавляем заголовок H2 со сносками
+            if ch['element']:
+                add_heading_with_footnotes(doc, ch['element'], 2, config['fonts']['chapter'])
             
             for p in ch['paragraphs']:
                 add_formatted_paragraph(doc, p, config['fonts']['text'])
