@@ -151,40 +151,46 @@ def fetch_conversation(conv, text_config):
         chapters = []
         is_fallback = False
 
-        # ===== ОСНОВНОЙ СЦЕНАРИЙ =====
-        headings = soup.find_all('h2', class_='text-center')
+        h1 = soup.find('h1')
+        if not h1:
+            return conv, [], False
 
-        if headings:
-            for h in headings:
-                title = h.get_text(strip=True)
-                div = h.find_next_sibling('div')
-                
-                if div:
-                    paragraphs = div.find_all('p', class_='txt')
-                    if paragraphs:
-                        chapters.append({
-                            'title': title,
-                            'paragraphs': paragraphs
-                        })
+        node = h1
 
-        # ===== FALLBACK =====
-        else:
-            h1 = soup.find('h1')
-            
-            if h1:
-                is_fallback = True
-                title = h1.get_text(separator=' ', strip=True)
+        current_chapter = None
+        intro_paragraphs = []
+
+        while True:
+            node = node.find_next()
+            if not node:
+                break
+
+            # ===== ВСТРЕТИЛИ H2 =====
+            if node.name == 'h2' and 'text-center' in node.get('class', []):
+                title = node.get_text(strip=True)
+
+                current_chapter = {
+                    'title': title,
+                    'paragraphs': []
+                }
+                chapters.append(current_chapter)
+                continue
+
+            # ===== ПАРАГРАФ =====
+            if node.name == 'p' and 'txt' in node.get('class', []):
                 
-                div = h1.find_next_sibling('div')
-                
-                if div:
-                    paragraphs = div.find_all('p', class_='txt')
-                    
-                    if paragraphs:
-                        chapters.append({
-                            'title': title,
-                            'paragraphs': paragraphs
-                        })
+                # если ещё не было ни одного h2 → это intro
+                if current_chapter is None:
+                    intro_paragraphs.append(node)
+                else:
+                    current_chapter['paragraphs'].append(node)
+
+        # ===== ЕСЛИ БЫЛ INTRO =====
+        if intro_paragraphs:
+            chapters.insert(0, {
+                'title': '',  # без заголовка
+                'paragraphs': intro_paragraphs
+            })
 
         return conv, chapters, is_fallback
     
