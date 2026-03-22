@@ -53,11 +53,13 @@ def main():
     total_notes = 0
     
     for conv, chapters, is_fallback, notes in results:
-        # Добавляем заголовок H1
-        h = doc.add_heading(conv['title'], 1)
-        h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        for run in h.runs:
-            apply_font(run, config['fonts']['conversation'])
+        # Добавляем заголовок H1 только для многостраничников (где есть название беседы)
+        # и если это не одностраничник (is_single_page не установлен или False)
+        if conv['title'] and not conv.get('is_single_page', False):
+            h = doc.add_heading(conv['title'], 1)
+            h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for run in h.runs:
+                apply_font(run, config['fonts']['conversation'])
         
         if is_fallback:
             for ch in chapters:

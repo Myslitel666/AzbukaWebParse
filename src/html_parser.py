@@ -285,9 +285,9 @@ def get_conversations():
     # 4. Fallback - если ничего не нашли
     print("Не удалось определить структуру, используется fallback")
     conversations.append({
-        'title': config.get('book_title', 'Книга'),
+        'title': '',  # Пустой заголовок
         'url': base,
-        'is_single_page': True
+        'is_single_page': True  # ← этот флаг
     })
     
     return conversations
