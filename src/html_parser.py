@@ -55,9 +55,7 @@ def fetch_single_page_conversation(conv, text_config):
         
         # Находим контейнер с содержимым
         book_div = soup.find('div', class_='book')
-        
         if not book_div:
-            print("book_div не найден, возвращаем пустой результат")
             return conv, [], False, []
         
         # Находим все заголовки h2
@@ -77,7 +75,6 @@ def fetch_single_page_conversation(conv, text_config):
         # 1. Обрабатываем "От издателей"
         if service_h2:
             izdateli = service_h2[0]
-            print(f"Обрабатываем 'От издателей': {izdateli.get_text(strip=True)}")
             izdateli_chapter = {
                 'title': izdateli.get_text(strip=True),
                 'element': izdateli,
@@ -85,84 +82,53 @@ def fetch_single_page_conversation(conv, text_config):
             }
             
             node = izdateli.find_next()
-            para_count = 0
             while node:
                 if node in chapters_h2:
-                    print(f"  остановка у письма: {node.get_text(strip=True)[:30]}")
                     break
-                if node.name == 'p' and 'txt' in node.get('class', []):
+                # Пропускаем примечания
+                if node.name == 'div' and 'note' in node.get('class', []):
+                    parse_note(node, notes)
+                    node = node.find_next()
+                    continue
+                # Собираем ВСЕ параграфы
+                if node.name == 'p':
                     text = node.get_text(strip=True)
-                    if not re.match(r'^[\d\s]+$', text):
+                    if text and not re.match(r'^[\d\s]+$', text):
                         izdateli_chapter['paragraphs'].append(node)
-                        para_count += 1
                 node = node.find_next()
             
             if izdateli_chapter['paragraphs']:
                 chapters.append(izdateli_chapter)
-                print(f"  глава 'От издателей' добавлена")
-        else:
-            print("service_h2 пустой")
         
         # 2. Обрабатываем письма
-        print(f"\nОбрабатываем письма, всего: {len(chapters_h2)}")
         for i, h2 in enumerate(chapters_h2):
-            print(f"  Письмо {i+1}: {h2.get_text(strip=True)[:50]}")
-            
             current_chapter = {
                 'title': h2.get_text(strip=True),
                 'element': h2,
                 'paragraphs': []
             }
-
-            node = h2
-
-            for _ in range(10):  # смотрим первые 10 элементов
-                node = node.find_next()
-                if not node:
-                    break
-                if node.name == 'div' and node.find('p', class_='h6'):
-                    h6 = node.find('p', class_='h6')
-                    current_chapter['paragraphs'].append(h6)
-                    break
             
-            # Ищем h6 - он находится в следующем div после h2
+            # Собираем ВСЕ параграфы, пропуская примечания
             node = h2.find_next()
-            h6_found = None
-            if node and node.name == 'div':
-                h6 = node.find('p', class_='h6')
-                if h6:
-                    h6_found = h6
-                    current_chapter['paragraphs'].append(h6)
-                    print(f"    найден h6: {h6.get_text(strip=True)[:80]}")
-                    print(f"    классы h6: {h6.get('class')}")
-                    # Проверяем содержимое h6
-                    for child in h6.children:
-                        print(f"      child: {child.name if hasattr(child, 'name') else 'text'}, текст: {str(child)[:50]}")
-                        
-            # Собираем остальные параграфы
-            node = h2.find_next()
-            para_count = 0
             while node:
                 if node.name == 'h2':
                     break
+                
+                # Если нашли блок примечаний - пропускаем его целиком
                 if node.name == 'div' and 'note' in node.get('class', []):
                     parse_note(node, notes)
                     node = node.find_next()
                     continue
-                # Добавляем обработку p.h6cc
-                if node.name == 'p' and ('txt' in node.get('class', []) or 'h6cc' in node.get('class', [])):
+                
+                # Собираем ВСЕ параграфы (любые p)
+                if node.name == 'p':
                     text = node.get_text(strip=True)
-                    if not re.match(r'^[\d\s]+$', text):
-                        if node != h6_found:
-                            current_chapter['paragraphs'].append(node)
-                            para_count += 1
+                    if text and not re.match(r'^[\d\s]+$', text):
+                        current_chapter['paragraphs'].append(node)
+                
                 node = node.find_next()
             
-            print(f"    добавлено параграфов: {para_count}, всего в главе: {len(current_chapter['paragraphs'])}")
             chapters.append(current_chapter)
-        
-        print(f"\nВсего глав собрано: {len(chapters)}")
-        print(f"Всего примечаний: {len(notes)}")
         
         return conv, chapters, False, notes
     
