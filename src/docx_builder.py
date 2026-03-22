@@ -21,13 +21,19 @@ def process_footnotes_in_text(element, text_config):
                 fragments.append((node, default_format, None))
             return
         
+        # Определяем формат для текущего узла
         current_format = default_format
-
+        
         # Обработка <br> как переноса строки
         if node.name == 'br':
-            fragments.append(('\n', default_format, None))
+            fragments.append(('\n', current_format, None))
             return
         
+        # Обработка <i> (курсив)
+        if node.name == 'i':
+            current_format = 'italic'
+        
+        # Обработка <a> со сноской
         if node.name == 'a' and node.get('href', '').startswith('#note'):
             note_text = node.get_text(strip=True)
             match = re.search(r'(\d+)', note_text)
@@ -36,6 +42,7 @@ def process_footnotes_in_text(element, text_config):
                 fragments.append((note_number, 'superscript', None))
             return
         
+        # Обработка <sup>
         if node.name == 'sup':
             for child in node.children:
                 if child.name == 'a' and child.get('href', '').startswith('#note'):
@@ -50,6 +57,7 @@ def process_footnotes_in_text(element, text_config):
                         fragments.append((text, 'superscript', None))
             return
         
+        # Обработка <span> с цитатами
         if node.name == 'span':
             classes = node.get('class', [])
             if 'quote' in classes or 'synodal' in classes:
@@ -57,30 +65,24 @@ def process_footnotes_in_text(element, text_config):
             if 'church' in classes:
                 current_format = 'italic'
         
+        # Обработка <b> (жирный)
         if node.name == 'b':
             current_format = 'bold'
         
-        # Обрабатываем детей
+        # Рекурсивно обрабатываем детей
         children = list(node.children)
         for i, child in enumerate(children):
             process_node(child, current_format)
             
             # Проверяем, нужно ли добавить пробел между элементами
             if i < len(children) - 1:
-                # Получаем тексты текущего и следующего элемента
                 current_text = get_text_content(child).strip()
                 next_text = get_text_content(children[i + 1]).strip()
                 
-                # Проверяем, что оба не пустые
                 if current_text and next_text:
-                    # Проверяем последний символ текущего и первый следующего
                     last_char = current_text[-1]
                     first_char = next_text[0]
                     
-                    # Добавляем пробел ТОЛЬКО если:
-                    # 1. Оба - буквы или цифры
-                    # 2. Последний символ не является знаком препинания
-                    # 3. Первый символ не является знаком препинания или кавычкой
                     should_add_space = (
                         last_char.isalnum() and 
                         first_char.isalnum() and
@@ -89,7 +91,7 @@ def process_footnotes_in_text(element, text_config):
                     )
                     
                     if should_add_space:
-                        fragments.append((' ', default_format, None))
+                        fragments.append((' ', current_format, None))
     
     process_node(element)
     return fragments
@@ -140,7 +142,7 @@ def add_formatted_paragraph(doc, p_element, text_config):
     paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
     fragments = process_footnotes_in_text(p_element, text_config)
-    
+
     # Просто добавляем фрагменты как есть, без дополнительных пробелов
     for text, fmt, note_num in fragments:
         if not text:

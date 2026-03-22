@@ -50,15 +50,11 @@ def fetch_single_page_conversation(conv, text_config):
         
         soup = BeautifulSoup(html_content, 'html.parser')
         
-        # ===== ОТЛАДКА =====
-        print(f"\n=== ОТЛАДКА fetch_single_page_conversation ===")
-        
         chapters = []
         notes = []
         
         # Находим контейнер с содержимым
         book_div = soup.find('div', class_='book')
-        print(f"book_div найден: {book_div is not None}")
         
         if not book_div:
             print("book_div не найден, возвращаем пустой результат")
@@ -66,7 +62,6 @@ def fetch_single_page_conversation(conv, text_config):
         
         # Находим все заголовки h2
         all_h2 = book_div.find_all('h2')
-        print(f"Всего h2: {len(all_h2)}")
         
         # Отделяем служебные заголовки (От издателей) от основных (text-center)
         service_h2 = []
@@ -74,15 +69,10 @@ def fetch_single_page_conversation(conv, text_config):
         
         for h2 in all_h2:
             classes = h2.get('class', [])
-            print(f"  h2 классы: {classes}, текст: {h2.get_text(strip=True)[:50]}")
             if 'title' in classes and 'h2' in classes:
                 service_h2.append(h2)
-                print(f"    -> добавлен в service_h2")
             elif 'text-center' in classes:
                 chapters_h2.append(h2)
-                print(f"    -> добавлен в chapters_h2")
-        
-        print(f"service_h2: {len(service_h2)}, chapters_h2: {len(chapters_h2)}")
         
         # 1. Обрабатываем "От издателей"
         if service_h2:
@@ -105,10 +95,8 @@ def fetch_single_page_conversation(conv, text_config):
                     if not re.match(r'^[\d\s]+$', text):
                         izdateli_chapter['paragraphs'].append(node)
                         para_count += 1
-                        print(f"  добавлен параграф {para_count}: {text[:50]}")
                 node = node.find_next()
             
-            print(f"  всего параграфов в 'От издателей': {para_count}")
             if izdateli_chapter['paragraphs']:
                 chapters.append(izdateli_chapter)
                 print(f"  глава 'От издателей' добавлена")
@@ -125,6 +113,17 @@ def fetch_single_page_conversation(conv, text_config):
                 'element': h2,
                 'paragraphs': []
             }
+
+            node = h2
+
+            for _ in range(10):  # смотрим первые 10 элементов
+                node = node.find_next()
+                if not node:
+                    break
+                if node.name == 'div' and node.find('p', class_='h6'):
+                    h6 = node.find('p', class_='h6')
+                    current_chapter['paragraphs'].append(h6)
+                    break
             
             # Ищем h6 - он находится в следующем div после h2
             node = h2.find_next()
@@ -135,7 +134,11 @@ def fetch_single_page_conversation(conv, text_config):
                     h6_found = h6
                     current_chapter['paragraphs'].append(h6)
                     print(f"    найден h6: {h6.get_text(strip=True)[:80]}")
-            
+                    print(f"    классы h6: {h6.get('class')}")
+                    # Проверяем содержимое h6
+                    for child in h6.children:
+                        print(f"      child: {child.name if hasattr(child, 'name') else 'text'}, текст: {str(child)[:50]}")
+                        
             # Собираем остальные параграфы
             node = h2.find_next()
             para_count = 0
@@ -159,7 +162,6 @@ def fetch_single_page_conversation(conv, text_config):
         
         print(f"\nВсего глав собрано: {len(chapters)}")
         print(f"Всего примечаний: {len(notes)}")
-        print("=== КОНЕЦ ОТЛАДКИ ===\n")
         
         return conv, chapters, False, notes
     
