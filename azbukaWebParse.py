@@ -120,11 +120,14 @@ def process_footnotes_in_text(element, text_config):
     """Обрабатывает элемент и возвращает список фрагментов с форматированием"""
     fragments = []
     
-    def process_node(node):
+    def process_node(node, default_format='normal'):
         if isinstance(node, str):
             if node.strip():
-                fragments.append((node, 'normal', None))
+                fragments.append((node, default_format, None))
             return
+        
+        # Определяем форматирование для текущего узла
+        current_format = default_format
         
         # Обработка ссылки на сноску
         if node.name == 'a' and node.get('href', '').startswith('#note'):
@@ -150,28 +153,22 @@ def process_footnotes_in_text(element, text_config):
                         fragments.append((text, 'superscript', None))
             return
         
+        # Обработка span с цитатами - ТОЛЬКО ЭТИ СПАНЫ ДЕЛАЕМ КУРСИВОМ
+        if node.name == 'span':
+            classes = node.get('class', [])
+            if 'quote' in classes or 'synodal' in classes:
+                current_format = 'italic'
+            # Церковнославянские цитаты тоже курсивом
+            if 'church' in classes:
+                current_format = 'italic'
+        
         # Обработка жирного текста
         if node.name == 'b':
-            for child in node.children:
-                process_node(child)
-                # Добавляем флаг bold к последним добавленным фрагментам
-                for i in range(len(fragments)):
-                    if fragments[i][1] == 'normal':
-                        fragments[i] = (fragments[i][0], 'bold', fragments[i][2])
-            return
+            current_format = 'bold'
         
-        # Обработка курсивного текста
-        if node.name == 'span' and ('quote' in node.get('class', []) or 'synodal' in node.get('class', [])):
-            for child in node.children:
-                process_node(child)
-                for i in range(len(fragments)):
-                    if fragments[i][1] == 'normal':
-                        fragments[i] = (fragments[i][0], 'italic', fragments[i][2])
-            return
-        
-        # Обычная обработка для всех остальных тегов
+        # Рекурсивно обрабатываем всех детей
         for child in node.children:
-            process_node(child)
+            process_node(child, current_format)
     
     process_node(element)
     return fragments
@@ -209,9 +206,17 @@ def add_formatted_paragraph(doc, p_element, text_config):
     
     fragments = process_footnotes_in_text(p_element, text_config)
     
+    # Добавляем пробелы между фрагментами там, где нужно
+    last_text = ""
     for text, fmt, note_num in fragments:
         if not text:
             continue
+        
+        # Добавляем пробел между разными span'ами, если их склеило
+        if last_text and last_text[-1].isalpha() and text[0].isalpha():
+            # Между буквами добавляем пробел
+            run = paragraph.add_run(" ")
+            apply_font(run, text_config)
         
         run = paragraph.add_run(text)
         apply_font(run, text_config)
@@ -222,6 +227,8 @@ def add_formatted_paragraph(doc, p_element, text_config):
             run.italic = True
         elif fmt == 'superscript':
             run.font.superscript = True
+        
+        last_text = text
 
 def add_notes_section(doc, notes):
     """Добавляет раздел с примечаниями"""
