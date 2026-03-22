@@ -72,16 +72,30 @@ def fetch_single_page_conversation(conv, text_config):
                 })
             return conv, chapters, True, notes
         
-        # Собираем вступительные параграфы (до первого h2)
-        intro_paragraphs = []
-        current = book_div.find()
-        while current:
-            if current.name == 'h2' and 'text-center' in current.get('class', []):
-                break
-            if current.name == 'p' and 'txt' in current.get('class', []):
-                intro_paragraphs.append(current)
-            current = current.find_next()
+        # ===== ПРОПУСКАЕМ НЕНУЖНЫЕ ЭЛЕМЕНТЫ В НАЧАЛЕ =====
+        # Ищем первый реальный заголовок (h2) и пропускаем всё, что до него
+        first_h2 = h2_tags[0]
         
+        # Теперь ищем элемент "От издателей" - это h2 с классом "title h2"
+        # Он должен быть до первого h2 с text-center
+        издатели_h2 = None
+        for elem in book_div.find_all():
+            if elem.name == 'h2' and 'title' in elem.get('class', []) and 'h2' in elem.get('class', []):
+                if elem.get_text(strip=True) == 'От издателей':
+                    издатели_h2 = elem
+                    break
+        
+        # Собираем вступительные параграфы ТОЛЬКО от издателей
+        intro_paragraphs = []
+        if издатели_h2:
+            # Начинаем с издатели_h2 и собираем его параграфы
+            node = издатели_h2.find_next()
+            while node and node != first_h2:
+                if node.name == 'p' and 'txt' in node.get('class', []):
+                    intro_paragraphs.append(node)
+                node = node.find_next()
+        
+        # Добавляем вступительную главу (без заголовка)
         if intro_paragraphs:
             chapters.append({
                 'title': '',
@@ -89,8 +103,12 @@ def fetch_single_page_conversation(conv, text_config):
                 'paragraphs': intro_paragraphs
             })
         
-        # Собираем каждую главу/письмо
+        # Теперь собираем каждое письмо/главу, начиная с first_h2
         for i, h2 in enumerate(h2_tags):
+            # Пропускаем, если это "От издателей" (он уже обработан)
+            if 'title' in h2.get('class', []) and h2.get_text(strip=True) == 'От издателей':
+                continue
+            
             current_chapter = {
                 'title': h2.get_text(strip=True),
                 'element': h2,
@@ -101,7 +119,7 @@ def fetch_single_page_conversation(conv, text_config):
             node = h2.find_next()
             while node:
                 # Если нашли следующий h2 - останавливаемся
-                if node.name == 'h2' and 'text-center' in node.get('class', []):
+                if node.name == 'h2':
                     break
                 # Если нашли примечание - парсим отдельно
                 if node.name == 'div' and 'note' in node.get('class', []):
@@ -117,7 +135,6 @@ def fetch_single_page_conversation(conv, text_config):
         
         # Парсим оставшиеся примечания
         for note_div in book_div.find_all('div', class_='note'):
-            # Проверяем, не добавлено ли уже
             sup_link = note_div.find('sup')
             if sup_link:
                 sup_text = sup_link.get_text(strip=True)
