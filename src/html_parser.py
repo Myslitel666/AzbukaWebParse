@@ -149,7 +149,8 @@ def fetch_single_page_conversation(conv, text_config):
                     parse_note(node, notes)
                     node = node.find_next()
                     continue
-                if node.name == 'p' and 'txt' in node.get('class', []):
+                # Добавляем обработку p.h6cc
+                if node.name == 'p' and ('txt' in node.get('class', []) or 'h6cc' in node.get('class', [])):
                     text = node.get_text(strip=True)
                     if not re.match(r'^[\d\s]+$', text):
                         if node != h6_found:
@@ -219,7 +220,7 @@ def fetch_conversation(conv, text_config):
                 continue
 
             # Собираем только обычные параграфы (не из примечаний)
-            if node.name == 'p' and 'txt' in node.get('class', []):
+            if node.name == 'p' and ('txt' in node.get('class', []) or 'h6cc' in node.get('class', [])):
                 # Проверяем, не находится ли этот параграф внутри div.note
                 parent = node.find_parent('div', class_='note')
                 if not parent:  # Если не внутри примечания

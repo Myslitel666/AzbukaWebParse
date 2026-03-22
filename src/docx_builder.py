@@ -8,18 +8,28 @@ from .docx_helpers import apply_font
 def process_footnotes_in_text(element, text_config):
     """Обрабатывает элемент и возвращает список фрагментов с форматированием"""
     fragments = []
+    has_podpis = False
     
-    def process_node(node, default_format='normal'):
+    def process_node(node, default_format='normal', in_podpis=False):
+        nonlocal has_podpis
         if isinstance(node, str):
             if node:
-                fragments.append((node, default_format, None))
+                fragments.append((node, default_format, None, in_podpis))
             return
         
         current_format = default_format
+        current_in_podpis = in_podpis
+        
+        # Обработка span с классом podpisR
+        if node.name == 'span':
+            classes = node.get('class', [])
+            if 'podpisR' in classes:
+                current_in_podpis = True
+                has_podpis = True
         
         # Обработка <br> как переноса строки
         if node.name == 'br':
-            fragments.append(('\n', current_format, None))
+            fragments.append(('\n', current_format, None, current_in_podpis))
             return
         
         # Обработка <i> (курсив)
@@ -32,7 +42,7 @@ def process_footnotes_in_text(element, text_config):
             match = re.search(r'(\d+)', note_text)
             if match:
                 note_number = match.group(1)
-                fragments.append((note_number, 'superscript', None))
+                fragments.append((note_number, 'superscript', None, current_in_podpis))
             return
         
         # Обработка <sup>
@@ -43,11 +53,11 @@ def process_footnotes_in_text(element, text_config):
                     match = re.search(r'(\d+)', note_text)
                     if match:
                         note_number = match.group(1)
-                        fragments.append((note_number, 'superscript', None))
+                        fragments.append((note_number, 'superscript', None, current_in_podpis))
                 else:
                     text = child if isinstance(child, str) else child.get_text()
                     if text:
-                        fragments.append((text, 'superscript', None))
+                        fragments.append((text, 'superscript', None, current_in_podpis))
             return
         
         # Обработка <span> с цитатами
@@ -64,7 +74,7 @@ def process_footnotes_in_text(element, text_config):
         
         # Рекурсивно обрабатываем детей
         for child in node.children:
-            process_node(child, current_format)
+            process_node(child, current_format, current_in_podpis)
     
     process_node(element)
     
@@ -72,7 +82,7 @@ def process_footnotes_in_text(element, text_config):
     while fragments and fragments[-1][0] in ('\n', ' ', '\t'):
         fragments.pop()
     
-    return fragments
+    return fragments, has_podpis
 
 def add_heading_with_footnotes(doc, element, heading_level, font_config):
     if heading_level == 1:
@@ -82,9 +92,9 @@ def add_heading_with_footnotes(doc, element, heading_level, font_config):
     
     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    fragments = process_footnotes_in_text(element, font_config)
+    fragments, _ = process_footnotes_in_text(element, font_config)  # игнорируем has_podpis для заголовков
     
-    for text, fmt, note_num in fragments:
+    for text, fmt, note_num, _ in fragments:  # добавляем четвёртый элемент (is_podpis), игнорируем
         if not text:
             continue
         
@@ -107,10 +117,12 @@ def add_formatted_paragraph(doc, p_element, text_config):
     paragraph.paragraph_format.first_line_indent = Cm(text_config.get('first_line_indent_cm', 0.76))
     paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     
-    fragments = process_footnotes_in_text(p_element, text_config)
-
-    # Просто добавляем фрагменты как есть, без дополнительных пробелов
-    for text, fmt, note_num in fragments:
+    fragments, has_podpis = process_footnotes_in_text(p_element, text_config)
+    
+    if has_podpis:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    
+    for text, fmt, note_num, is_podpis in fragments:
         if not text:
             continue
         
@@ -119,7 +131,7 @@ def add_formatted_paragraph(doc, p_element, text_config):
         
         if fmt == 'bold':
             run.bold = True
-        elif fmt == 'italic':
+        elif fmt == 'italic' or is_podpis:
             run.italic = True
         elif fmt == 'superscript':
             run.font.superscript = True
