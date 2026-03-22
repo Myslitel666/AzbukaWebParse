@@ -55,7 +55,9 @@ def fetch_single_page_conversation(conv, text_config):
         
         # Находим контейнер с содержимым
         book_div = soup.find('div', class_='book')
+        
         if not book_div:
+            print("book_div не найден, возвращаем пустой результат")
             return conv, [], False, []
         
         # Находим все заголовки h2
@@ -108,19 +110,31 @@ def fetch_single_page_conversation(conv, text_config):
                 'paragraphs': []
             }
             
-            # Собираем ВСЕ параграфы, пропуская примечания
+            # Собираем параграфы
             node = h2.find_next()
             while node:
                 if node.name == 'h2':
                     break
                 
-                # Если нашли блок примечаний - пропускаем его целиком
+                # Пропускаем блоки примечаний
                 if node.name == 'div' and 'note' in node.get('class', []):
                     parse_note(node, notes)
-                    node = node.find_next()
+                    node = node.find_next_sibling()
                     continue
                 
-                # Собираем ВСЕ параграфы (любые p)
+                # Пропускаем разделитель звёздочек и заголовок "Примечания"
+                if node.name == 'p':
+                    classes = node.get('class', [])
+                    # Пропускаем after-text-vignette (звёздочки)
+                    if 'after-text-vignette' in classes:
+                        node = node.find_next()
+                        continue
+                    # Пропускаем h2 (заголовок "Примечания")
+                    if 'h2' in classes and node.get_text(strip=True) == 'Примечания':
+                        node = node.find_next()
+                        continue
+                
+                # Собираем ВСЕ остальные параграфы
                 if node.name == 'p':
                     text = node.get_text(strip=True)
                     if text and not re.match(r'^[\d\s]+$', text):
@@ -129,6 +143,9 @@ def fetch_single_page_conversation(conv, text_config):
                 node = node.find_next()
             
             chapters.append(current_chapter)
+        
+        print(f"\nВсего глав собрано: {len(chapters)}")
+        print(f"Всего примечаний: {len(notes)}")
         
         return conv, chapters, False, notes
     
