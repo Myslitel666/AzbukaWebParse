@@ -57,62 +57,43 @@ def fetch_single_page_conversation(conv, text_config):
         book_div = soup.find('div', class_='book')
         
         if not book_div:
-            print("book_div не найден, возвращаем пустой результат")
             return conv, [], False, []
         
-        # Находим все заголовки h2
+        # Находим все заголовки h2 в порядке их следования
         all_h2 = book_div.find_all('h2')
         
-        # Отделяем служебные заголовки (От издателей) от основных (text-center)
-        service_h2 = []
-        chapters_h2 = []
+        # Функция для проверки навигационных параграфов
+        def is_navigation_paragraph(p):
+            classes = p.get('class', [])
+            if 'h2o' in classes or 'h3o' in classes:
+                return True
+            if p.find('span', class_='h2o') or p.find('span', class_='h3o'):
+                return True
+            text = p.get_text(strip=True)
+            if re.match(r'^[\d\s]+$', text):
+                return True
+            return False
         
+        # Проходим по всем заголовкам в порядке их следования
         for h2 in all_h2:
             classes = h2.get('class', [])
-            if 'title' in classes and 'h2' in classes:
-                service_h2.append(h2)
-            elif 'text-center' in classes:
-                chapters_h2.append(h2)
-        
-        # 1. Обрабатываем "От издателей"
-        if service_h2:
-            izdateli = service_h2[0]
-            izdateli_chapter = {
-                'title': izdateli.get_text(strip=True),
-                'element': izdateli,
-                'paragraphs': []
-            }
+            text = h2.get_text(strip=True)
             
-            node = izdateli.find_next()
-            while node:
-                if node in chapters_h2:
-                    break
-                # Пропускаем примечания
-                if node.name == 'div' and 'note' in node.get('class', []):
-                    parse_note(node, notes)
-                    node = node.find_next()
-                    continue
-                # Собираем ВСЕ параграфы
-                if node.name == 'p':
-                    text = node.get_text(strip=True)
-                    if text and not re.match(r'^[\d\s]+$', text):
-                        izdateli_chapter['paragraphs'].append(node)
-                node = node.find_next()
+            # Пропускаем заголовок "Содержание"
+            if text == 'Содержание':
+                continue
             
-            if izdateli_chapter['paragraphs']:
-                chapters.append(izdateli_chapter)
-        
-        # 2. Обрабатываем письма
-        for i, h2 in enumerate(chapters_h2):
+            # Создаём главу (всегда добавляем, даже если нет содержимого)
             current_chapter = {
-                'title': h2.get_text(strip=True),
+                'title': text,
                 'element': h2,
                 'paragraphs': []
             }
             
-            # Собираем параграфы
+            # Собираем параграфы до следующего h2
             node = h2.find_next()
             while node:
+                # Останавливаемся на следующем h2
                 if node.name == 'h2':
                     break
                 
@@ -124,28 +105,29 @@ def fetch_single_page_conversation(conv, text_config):
                 
                 # Пропускаем разделитель звёздочек и заголовок "Примечания"
                 if node.name == 'p':
-                    classes = node.get('class', [])
-                    # Пропускаем after-text-vignette (звёздочки)
-                    if 'after-text-vignette' in classes:
+                    p_classes = node.get('class', [])
+                    if 'after-text-vignette' in p_classes:
                         node = node.find_next()
                         continue
-                    # Пропускаем h2 (заголовок "Примечания")
-                    if 'h2' in classes and node.get_text(strip=True) == 'Примечания':
+                    if 'h2' in p_classes and node.get_text(strip=True) == 'Примечания':
                         node = node.find_next()
                         continue
                 
-                # Собираем ВСЕ остальные параграфы
+                # Пропускаем навигационные параграфы
+                if node.name == 'p' and is_navigation_paragraph(node):
+                    node = node.find_next()
+                    continue
+                
+                # Собираем все остальные параграфы
                 if node.name == 'p':
-                    text = node.get_text(strip=True)
-                    if text and not re.match(r'^[\d\s]+$', text):
+                    p_text = node.get_text(strip=True)
+                    if p_text and not re.match(r'^[\d\s]+$', p_text):
                         current_chapter['paragraphs'].append(node)
                 
                 node = node.find_next()
             
+            # Добавляем главу всегда (даже если нет параграфов)
             chapters.append(current_chapter)
-        
-        print(f"\nВсего глав собрано: {len(chapters)}")
-        print(f"Всего примечаний: {len(notes)}")
         
         return conv, chapters, False, notes
     
