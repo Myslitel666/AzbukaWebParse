@@ -22,6 +22,11 @@ def process_footnotes_in_text(element, text_config):
             return
         
         current_format = default_format
+
+        # Обработка <br> как переноса строки
+        if node.name == 'br':
+            fragments.append(('\n', default_format, None))
+            return
         
         if node.name == 'a' and node.get('href', '').startswith('#note'):
             note_text = node.get_text(strip=True)
@@ -103,15 +108,31 @@ def add_heading_with_footnotes(doc, element, heading_level, font_config):
         if not text:
             continue
         
-        run = heading.add_run(text)
-        apply_font(run, font_config)
-        
-        if fmt == 'bold':
-            run.bold = True
-        elif fmt == 'italic':
-            run.italic = True
-        elif fmt == 'superscript':
-            run.font.superscript = True
+        # Проверяем, есть ли в тексте переносы строк
+        if '\n' in text:
+            parts = text.split('\n')
+            for i, part in enumerate(parts):
+                if part:
+                    run = heading.add_run(part)
+                    apply_font(run, font_config)
+                    if fmt == 'bold':
+                        run.bold = True
+                    elif fmt == 'italic':
+                        run.italic = True
+                    elif fmt == 'superscript':
+                        run.font.superscript = True
+                # После каждой части, кроме последней, добавляем перенос строки
+                if i < len(parts) - 1:
+                    heading.add_run().add_break()
+        else:
+            run = heading.add_run(text)
+            apply_font(run, font_config)
+            if fmt == 'bold':
+                run.bold = True
+            elif fmt == 'italic':
+                run.italic = True
+            elif fmt == 'superscript':
+                run.font.superscript = True
 
 def add_formatted_paragraph(doc, p_element, text_config):
     paragraph = doc.add_paragraph()
