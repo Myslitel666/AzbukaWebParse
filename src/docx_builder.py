@@ -1,0 +1,161 @@
+import re
+from docx.shared import Cm, Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+from .config_loader import config, FONT_NAME
+from .docx_helpers import apply_font
+
+def process_footnotes_in_text(element, text_config):
+    """Обрабатывает элемент и возвращает список фрагментов с форматированием"""
+    fragments = []
+    
+    def process_node(node, default_format='normal'):
+        if isinstance(node, str):
+            if node.strip():
+                fragments.append((node, default_format, None))
+            return
+        
+        current_format = default_format
+        
+        if node.name == 'a' and node.get('href', '').startswith('#note'):
+            note_text = node.get_text(strip=True)
+            match = re.search(r'(\d+)', note_text)
+            if match:
+                note_number = match.group(1)
+                fragments.append((note_number, 'superscript', None))
+            return
+        
+        if node.name == 'sup':
+            for child in node.children:
+                if child.name == 'a' and child.get('href', '').startswith('#note'):
+                    note_text = child.get_text(strip=True)
+                    match = re.search(r'(\d+)', note_text)
+                    if match:
+                        note_number = match.group(1)
+                        fragments.append((note_number, 'superscript', None))
+                else:
+                    text = child if isinstance(child, str) else child.get_text()
+                    if text:
+                        fragments.append((text, 'superscript', None))
+            return
+        
+        if node.name == 'span':
+            classes = node.get('class', [])
+            if 'quote' in classes or 'synodal' in classes:
+                current_format = 'italic'
+            if 'church' in classes:
+                current_format = 'italic'
+        
+        if node.name == 'b':
+            current_format = 'bold'
+        
+        for child in node.children:
+            process_node(child, current_format)
+    
+    process_node(element)
+    return fragments
+
+def add_heading_with_footnotes(doc, element, heading_level, font_config):
+    if heading_level == 1:
+        heading = doc.add_heading(level=1)
+    else:
+        heading = doc.add_heading(level=2)
+    
+    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    fragments = process_footnotes_in_text(element, font_config)
+    
+    for text, fmt, note_num in fragments:
+        if not text:
+            continue
+        
+        run = heading.add_run(text)
+        apply_font(run, font_config)
+        
+        if fmt == 'bold':
+            run.bold = True
+        elif fmt == 'italic':
+            run.italic = True
+        elif fmt == 'superscript':
+            run.font.superscript = True
+
+def add_formatted_paragraph(doc, p_element, text_config):
+    paragraph = doc.add_paragraph()
+    paragraph.paragraph_format.first_line_indent = Cm(text_config.get('first_line_indent_cm', 0.76))
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    
+    fragments = process_footnotes_in_text(p_element, text_config)
+    
+    last_text = ""
+    for text, fmt, note_num in fragments:
+        if not text:
+            continue
+        
+        if last_text and last_text[-1].isalpha() and text[0].isalpha():
+            run = paragraph.add_run(" ")
+            apply_font(run, text_config)
+        
+        run = paragraph.add_run(text)
+        apply_font(run, text_config)
+        
+        if fmt == 'bold':
+            run.bold = True
+        elif fmt == 'italic':
+            run.italic = True
+        elif fmt == 'superscript':
+            run.font.superscript = True
+        
+        last_text = text
+
+def add_notes_section(doc, notes):
+    if not notes:
+        return
+    
+    p = doc.add_paragraph()
+    run = p.add_run('★ ★ ★')
+    run.font.size = Pt(config['fonts']['text']['size_pt'])
+    run.font.name = FONT_NAME
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    h = doc.add_heading('Примечания', 2)
+    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for run in h.runs:
+        apply_font(run, config['fonts']['chapter'])
+    
+    for note in notes:
+        p = doc.add_paragraph()
+        p.paragraph_format.first_line_indent = Cm(0)
+        p.paragraph_format.left_indent = Cm(0.5)
+        
+        run = p.add_run(f"{note['number']}")
+        run.font.superscript = True
+        apply_font(run, config['fonts']['text'])
+        
+        run = p.add_run(" ")
+        apply_font(run, config['fonts']['text'])
+        
+        for fragment in note['fragments']:
+            run = p.add_run(fragment['text'])
+            apply_font(run, config['fonts']['text'])
+            if fragment.get('italic'):
+                run.italic = True
+            if fragment.get('bold'):
+                run.bold = True
+
+def create_document(doc):
+    """Создает и настраивает новый документ (заголовки, оглавление)"""
+    from .docx_helpers import setup_footer, setup_styles, add_table_of_contents, apply_font
+    
+    setup_footer(doc)
+    setup_styles(doc)
+    
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    apply_font(p.add_run(config['headers']['main_title']), config['fonts']['main_title'])
+    
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    apply_font(p.add_run(config['headers']['subtitle']), config['fonts']['subtitle'])
+    
+    doc.add_paragraph()
+    add_table_of_contents(doc)
