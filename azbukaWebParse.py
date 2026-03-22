@@ -116,7 +116,7 @@ def add_table_of_contents(doc):
     
     doc.add_page_break()
 
-def process_footnotes_in_text(element, text_config, is_heading=False):
+def process_footnotes_in_text(element, text_config):
     """Обрабатывает элемент и возвращает список фрагментов с форматированием"""
     fragments = []
     
@@ -185,8 +185,7 @@ def add_heading_with_footnotes(doc, element, heading_level, font_config):
     
     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    # Обрабатываем текст заголовка со сносками
-    fragments = process_footnotes_in_text(element, font_config, is_heading=True)
+    fragments = process_footnotes_in_text(element, font_config)
     
     for text, fmt, note_num in fragments:
         if not text:
@@ -201,7 +200,6 @@ def add_heading_with_footnotes(doc, element, heading_level, font_config):
             run.italic = True
         elif fmt == 'superscript':
             run.font.superscript = True
-            # Не меняем размер шрифта - superscript сам делает текст маленьким
 
 def add_formatted_paragraph(doc, p_element, text_config):
     """Добавляет параграф с обработкой сносок"""
@@ -224,7 +222,48 @@ def add_formatted_paragraph(doc, p_element, text_config):
             run.italic = True
         elif fmt == 'superscript':
             run.font.superscript = True
-            # Не меняем размер шрифта - superscript сам делает текст маленьким
+
+def add_notes_section(doc, notes):
+    """Добавляет раздел с примечаниями"""
+    if not notes:
+        return
+    
+    # Разделитель со звёздочками
+    p = doc.add_paragraph()
+    run = p.add_run('★ ★ ★')
+    run.font.size = Pt(config['fonts']['text']['size_pt'])  # Используем обычный размер шрифта
+    run.font.name = FONT_NAME
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # Заголовок "Примечания"
+    h = doc.add_heading('Примечания', 2)
+    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for run in h.runs:
+        apply_font(run, config['fonts']['chapter'])
+    
+    # Добавляем каждое примечание
+    for note in notes:
+        p = doc.add_paragraph()
+        p.paragraph_format.first_line_indent = Cm(0)
+        p.paragraph_format.left_indent = Cm(0.5)
+        
+        # Номер сноски (надстрочный)
+        run = p.add_run(f"{note['number']}")
+        run.font.superscript = True
+        apply_font(run, config['fonts']['text'])
+        
+        # Пробел после номера
+        run = p.add_run(" ")
+        apply_font(run, config['fonts']['text'])
+        
+        # Текст примечания
+        for fragment in note['fragments']:
+            run = p.add_run(fragment['text'])
+            apply_font(run, config['fonts']['text'])
+            if fragment.get('italic'):
+                run.italic = True
+            if fragment.get('bold'):
+                run.bold = True
 
 # ========== ПАРСИНГ ==========
 def fetch_conversation(conv, text_config):
@@ -241,12 +280,13 @@ def fetch_conversation(conv, text_config):
 
         h1 = soup.find('h1')
         if not h1:
-            return conv, [], False
+            return conv, [], False, []
 
         node = h1
 
         current_chapter = None
         intro_paragraphs = []
+        notes = []  # Собираем примечания для этой главы
 
         while True:
             node = node.find_next()
@@ -266,11 +306,54 @@ def fetch_conversation(conv, text_config):
 
             # ===== ПАРАГРАФ =====
             if node.name == 'p' and 'txt' in node.get('class', []):
-                
                 if current_chapter is None:
                     intro_paragraphs.append(node)
                 else:
                     current_chapter['paragraphs'].append(node)
+                continue
+            
+            # ===== ОБРАБОТКА ПРИМЕЧАНИЙ =====
+            # Ищем разделитель * * *
+            if node.name == 'p' and 'after-text-vignette' in node.get('class', []):
+                # Это разделитель перед примечаниями
+                continue
+            
+            # Ищем заголовок "Примечания"
+            if node.name == 'p' and node.get('class') == ['h2'] and node.get_text(strip=True) == 'Примечания':
+                continue
+            
+            # Ищем блоки с примечаниями
+            if node.name == 'div' and 'note' in node.get('class', []):
+                # Находим номер сноски
+                sup_link = node.find('sup')
+                note_number = None
+                if sup_link:
+                    sup_text = sup_link.get_text(strip=True)
+                    match = re.search(r'(\d+)', sup_text)
+                    if match:
+                        note_number = match.group(1)
+                
+                # Находим текст примечания
+                note_p = node.find('p', class_='txt')
+                if note_p and note_number:
+                    # Обрабатываем текст примечания с возможным форматированием
+                    note_fragments = []
+                    for child in note_p.children:
+                        if isinstance(child, str):
+                            if child.strip():
+                                note_fragments.append({'text': child, 'italic': False, 'bold': False})
+                        elif child.name == 'i' or (child.name == 'span' and 'quote' in child.get('class', [])):
+                            note_fragments.append({'text': child.get_text(), 'italic': True, 'bold': False})
+                        elif child.name == 'b':
+                            note_fragments.append({'text': child.get_text(), 'italic': False, 'bold': True})
+                        else:
+                            note_fragments.append({'text': child.get_text(), 'italic': False, 'bold': False})
+                    
+                    notes.append({
+                        'number': note_number,
+                        'fragments': note_fragments
+                    })
+                continue
 
         if intro_paragraphs:
             chapters.insert(0, {
@@ -279,11 +362,11 @@ def fetch_conversation(conv, text_config):
                 'paragraphs': intro_paragraphs
             })
 
-        return conv, chapters, is_fallback
+        return conv, chapters, is_fallback, notes
     
     except Exception as e:
         print(f"Ошибка: {e}")
-        return conv, [], False
+        return conv, [], False, []
 
 def fetch_all(conversations, text_config):
     results = [None] * len(conversations)
@@ -369,9 +452,10 @@ print("\nЗагрузка...")
 results = fetch_all(conversations, config['fonts']['text'])
 
 total = 0
+total_notes = 0
 
-for conv, chapters, is_fallback in results:
-    # Добавляем заголовок H1 (без сносок, так как они обычно в H2)
+for conv, chapters, is_fallback, notes in results:
+    # Добавляем заголовок H1
     h = doc.add_heading(conv['title'], 1)
     h.alignment = WD_ALIGN_PARAGRAPH.CENTER
     for run in h.runs:
@@ -392,11 +476,17 @@ for conv, chapters, is_fallback in results:
                 add_formatted_paragraph(doc, p, config['fonts']['text'])
             
             total += 1
+    
+    # Добавляем примечания в конец главы
+    if notes:
+        add_notes_section(doc, notes)
+        total_notes += len(notes)
 
 doc.save(file_name)
 
 print(f"\nГотово: {file_name}")
 print(f"Глав: {total}")
+print(f"Примечаний: {total_notes}")
 
 try:
     os.startfile(file_name)
