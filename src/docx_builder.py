@@ -9,19 +9,12 @@ def process_footnotes_in_text(element, text_config):
     """Обрабатывает элемент и возвращает список фрагментов с форматированием"""
     fragments = []
     
-    def get_text_content(node):
-        """Получает текстовое содержимое узла (рекурсивно)"""
-        if isinstance(node, str):
-            return node
-        return node.get_text()
-    
     def process_node(node, default_format='normal'):
         if isinstance(node, str):
             if node:
                 fragments.append((node, default_format, None))
             return
         
-        # Определяем формат для текущего узла
         current_format = default_format
         
         # Обработка <br> как переноса строки
@@ -70,30 +63,15 @@ def process_footnotes_in_text(element, text_config):
             current_format = 'bold'
         
         # Рекурсивно обрабатываем детей
-        children = list(node.children)
-        for i, child in enumerate(children):
+        for child in node.children:
             process_node(child, current_format)
-            
-            # Проверяем, нужно ли добавить пробел между элементами
-            if i < len(children) - 1:
-                current_text = get_text_content(child).strip()
-                next_text = get_text_content(children[i + 1]).strip()
-                
-                if current_text and next_text:
-                    last_char = current_text[-1]
-                    first_char = next_text[0]
-                    
-                    should_add_space = (
-                        last_char.isalnum() and 
-                        first_char.isalnum() and
-                        last_char not in '.,!?;:)]»' and
-                        first_char not in '.,!?;:([«'
-                    )
-                    
-                    if should_add_space:
-                        fragments.append((' ', current_format, None))
     
     process_node(element)
+    
+    # Удаляем хвостовые пробелы и переносы строк
+    while fragments and fragments[-1][0] in ('\n', ' ', '\t'):
+        fragments.pop()
+    
     return fragments
 
 def add_heading_with_footnotes(doc, element, heading_level, font_config):
@@ -110,31 +88,19 @@ def add_heading_with_footnotes(doc, element, heading_level, font_config):
         if not text:
             continue
         
-        # Проверяем, есть ли в тексте переносы строк
-        if '\n' in text:
-            parts = text.split('\n')
-            for i, part in enumerate(parts):
-                if part:
-                    run = heading.add_run(part)
-                    apply_font(run, font_config)
-                    if fmt == 'bold':
-                        run.bold = True
-                    elif fmt == 'italic':
-                        run.italic = True
-                    elif fmt == 'superscript':
-                        run.font.superscript = True
-                # После каждой части, кроме последней, добавляем перенос строки
-                if i < len(parts) - 1:
-                    heading.add_run().add_break()
-        else:
-            run = heading.add_run(text)
-            apply_font(run, font_config)
-            if fmt == 'bold':
-                run.bold = True
-            elif fmt == 'italic':
-                run.italic = True
-            elif fmt == 'superscript':
-                run.font.superscript = True
+        if text == '\n':
+            heading.add_run().add_break()
+            continue
+        
+        run = heading.add_run(text)
+        apply_font(run, font_config)
+        
+        if fmt == 'bold':
+            run.bold = True
+        elif fmt == 'italic':
+            run.italic = True
+        elif fmt == 'superscript':
+            run.font.superscript = True
 
 def add_formatted_paragraph(doc, p_element, text_config):
     paragraph = doc.add_paragraph()
