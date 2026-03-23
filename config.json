@@ -1,7 +1,11 @@
 {
-    "url": "https://azbyka.ru/otechnik/Feofan_Zatvornik/pisma-o-molitve/#7",
-    "output_file": "оформленный_документ.docx",
+    "url": "https://azbyka.ru/otechnik/Feofan_Zatvornik/rukopisi-iz-keli/",
+    "output_file": "Рукописи из кельи.docx",
     "font_name": "Arial Narrow",
+    "headers": {
+        "main_title": "Рукописи из кельи",
+        "subtitle": "святитель Феофан Затворник"
+    },
     "margins": {
         "top_cm": 1,
         "bottom_cm": 1,
@@ -34,7 +38,7 @@
             "color_rgb": [0, 0, 0]
         },
         "text": {
-            "size_pt": 12,
+            "size_pt": 14,
             "bold": false,
             "italic": false,
             "color_rgb": [0, 0, 0],
@@ -47,10 +51,6 @@
             "italic": false,
             "color_rgb": [0, 0, 0]
         }
-    },
-    "headers": {
-        "main_title": "Писания к десяти",
-        "subtitle": "Собеседования преподобного Иоанна Кассиана Римлянина"
     },
     "footer": {
         "enabled": true,

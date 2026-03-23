@@ -82,14 +82,15 @@ def main():
             add_notes_section(doc, notes)
             total_notes += len(notes)
     
-    doc.save(file_name)
+    #doc.save(file_name)
+    doc.save('D:\My Folder\Books\Учения Святых отцов\Word (+ Содержание - Разрывы)\\' + file_name)
     
     print(f"\nГотово: {file_name}")
     print(f"Глав: {total}")
     print(f"Примечаний: {total_notes}")
     
     try:
-        os.startfile(file_name)
+        os.startfile('D:\My Folder\Books\Учения Святых отцов\Word (+ Содержание - Разрывы)\\' + file_name)
     except:
         pass
 

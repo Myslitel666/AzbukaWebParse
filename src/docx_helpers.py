@@ -68,7 +68,7 @@ def add_table_of_contents(doc):
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
     run = p.add_run('Содержание')
-    run.font.size = Pt(12)
+    run.font.size = Pt(config['fonts']['text']['size_pt'])
     run.font.name = FONT_NAME
     run.font.bold = True
     
