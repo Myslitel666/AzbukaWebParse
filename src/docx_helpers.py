@@ -82,7 +82,7 @@ def add_table_of_contents(doc):
     run._r.append(fldChar1)
     
     instrText = OxmlElement('w:instrText')
-    instrText.text = 'TOC \\o "1-2" \\h \\z \\u'
+    instrText.text = 'TOC \\o "1-3" \\h \\z \\u'
     run._r.append(instrText)
     
     fldChar2 = OxmlElement('w:fldChar')

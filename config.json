@@ -1,10 +1,10 @@
 {
-    "url": "https://azbyka.ru/otechnik/Feofan_Zatvornik/rukopisi-iz-keli/",
-    "output_file": "Рукописи из кельи.docx",
+    "url": "https://azbyka.ru/otechnik/Feofan_Zatvornik/Pisma-o-raznykh-predmetakh-very-i-zhizni/",
+    "output_file": "Толкование на Апокалипсис св. Иоанна Богослова.docx",
     "font_name": "Arial Narrow",
     "headers": {
-        "main_title": "Рукописи из кельи",
-        "subtitle": "святитель Феофан Затворник"
+        "main_title": "Толкование на Апокалипсис св. Иоанна Богослова",
+        "subtitle": "архиепископ Андрей Кесарийский"
     },
     "margins": {
         "top_cm": 1,

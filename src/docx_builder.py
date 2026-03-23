@@ -87,8 +87,10 @@ def process_footnotes_in_text(element, text_config):
 def add_heading_with_footnotes(doc, element, heading_level, font_config):
     if heading_level == 1:
         heading = doc.add_heading(level=1)
-    else:
+    elif heading_level == 2:
         heading = doc.add_heading(level=2)
+    else:
+        heading = doc.add_heading(level=3)
     
     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
     

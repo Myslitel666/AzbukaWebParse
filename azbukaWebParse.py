@@ -53,8 +53,6 @@ def main():
     total_notes = 0
     
     for conv, chapters, is_fallback, notes in results:
-        # Добавляем заголовок H1 только для многостраничников (где есть название беседы)
-        # и если это не одностраничник (is_single_page не установлен или False)
         if conv['title'] and not conv.get('is_single_page', False):
             h = doc.add_heading(conv['title'], 1)
             h.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -68,29 +66,28 @@ def main():
                 total += 1
         else:
             for ch in chapters:
-                # Добавляем заголовок H2 со сносками
+                # Определяем уровень заголовка (2 или 3)
+                level = ch.get('level', 2)
                 if ch['element']:
-                    add_heading_with_footnotes(doc, ch['element'], 2, config['fonts']['chapter'])
+                    add_heading_with_footnotes(doc, ch['element'], level, config['fonts']['chapter'])
                 
                 for p in ch['paragraphs']:
                     add_formatted_paragraph(doc, p, config['fonts']['text'])
                 
                 total += 1
         
-        # Добавляем примечания в конец главы
         if notes:
             add_notes_section(doc, notes)
             total_notes += len(notes)
     
-    #doc.save(file_name)
-    doc.save('D:\My Folder\Books\Учения Святых отцов\Word (+ Содержание - Разрывы)\\' + file_name)
+    doc.save(file_name)
     
     print(f"\nГотово: {file_name}")
     print(f"Глав: {total}")
     print(f"Примечаний: {total_notes}")
     
     try:
-        os.startfile('D:\My Folder\Books\Учения Святых отцов\Word (+ Содержание - Разрывы)\\' + file_name)
+        os.startfile(file_name)
     except:
         pass
 

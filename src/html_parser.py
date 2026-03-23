@@ -187,10 +187,23 @@ def fetch_conversation(conv, text_config):
             if not node:
                 break
 
+            # Обработка h2
             if node.name == 'h2' and 'text-center' in node.get('class', []):
                 current_chapter = {
                     'title': node.get_text(strip=True),
                     'element': node,
+                    'level': 2,
+                    'paragraphs': []
+                }
+                chapters.append(current_chapter)
+                continue
+            
+            # Обработка h3
+            if node.name == 'h3' and 'text-center' in node.get('class', []):
+                current_chapter = {
+                    'title': node.get_text(strip=True),
+                    'element': node,
+                    'level': 3,
                     'paragraphs': []
                 }
                 chapters.append(current_chapter)
@@ -216,6 +229,7 @@ def fetch_conversation(conv, text_config):
             chapters.insert(0, {
                 'title': '',
                 'element': None,
+                'level': 2,
                 'paragraphs': intro_paragraphs
             })
 
