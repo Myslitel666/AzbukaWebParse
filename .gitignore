@@ -13,8 +13,9 @@ pip-delete-this-directory.txt
 .coverage
 htmlcov/
 
-# Word документы
+# Word и PDF документы
 *.docx
+*.pdf
 
 # IDE
 .vscode/
