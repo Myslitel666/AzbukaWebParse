@@ -171,6 +171,21 @@ def fetch_conversation(conv, text_config):
         
         chapters = []
         is_fallback = False
+        notes = []
+        
+        # Функция для проверки элементов примечаний
+        def is_note_section_element(node):
+            if node.name == 'p':
+                classes = node.get('class', [])
+                if 'after-text-vignette' in classes:
+                    return True
+                if 'h2' in classes and node.get_text(strip=True) == 'Примечания':
+                    return True
+            if node.name == 'div' and 'note' in node.get('class', []):
+                return True
+            if node.name == 'a' and 'Telegram-каналы' in node.get_text(strip=True):
+                return True
+            return False
 
         h1 = soup.find('h1')
         if not h1:
@@ -180,15 +195,29 @@ def fetch_conversation(conv, text_config):
 
         current_chapter = None
         intro_paragraphs = []
-        notes = []
 
         while True:
             node = node.find_next()
             if not node:
                 break
 
+            # Пропускаем элементы примечаний
+            if is_note_section_element(node):
+                if node.name == 'div' and 'note' in node.get('class', []):
+                    parse_note(node, notes)
+                node = node.find_next()
+                continue
+
             # Обработка h2
-            if node.name == 'h2' and 'text-center' in node.get('class', []):
+            if node.name == 'h2':
+                # Пропускаем служебные заголовки
+                text = node.get_text(strip=True)
+                classes = node.get('class', [])
+                
+                # Пропускаем заголовки с классом related-header
+                if 'related-header' in classes:
+                    continue
+                
                 current_chapter = {
                     'title': node.get_text(strip=True),
                     'element': node,
@@ -199,7 +228,7 @@ def fetch_conversation(conv, text_config):
                 continue
             
             # Обработка h3
-            if node.name == 'h3' and 'text-center' in node.get('class', []):
+            if node.name == 'h3':
                 current_chapter = {
                     'title': node.get_text(strip=True),
                     'element': node,
@@ -209,20 +238,22 @@ def fetch_conversation(conv, text_config):
                 chapters.append(current_chapter)
                 continue
 
-            # Пропускаем div с примечаниями - они будут обработаны отдельно
-            if node.name == 'div' and 'note' in node.get('class', []):
-                parse_note(node, notes)
-                continue
-
-            # Собираем только обычные параграфы (не из примечаний)
-            if node.name == 'p' and ('txt' in node.get('class', []) or 'h6cc' in node.get('class', [])):
+            # Собираем ВСЕ параграфы (не из примечаний)
+            if node.name == 'p':
+                text = node.get_text(strip=True)
+                # Пропускаем "Telegram-каналы"
+                if text == 'Telegram-каналы':
+                    node = node.find_next()
+                    continue
                 # Проверяем, не находится ли этот параграф внутри div.note
                 parent = node.find_parent('div', class_='note')
                 if not parent:  # Если не внутри примечания
-                    if current_chapter is None:
-                        intro_paragraphs.append(node)
-                    else:
-                        current_chapter['paragraphs'].append(node)
+                    text = node.get_text(strip=True)
+                    if text and not re.match(r'^[\d\s]+$', text):
+                        if current_chapter is None:
+                            intro_paragraphs.append(node)
+                        else:
+                            current_chapter['paragraphs'].append(node)
                 continue
 
         if intro_paragraphs:
@@ -238,7 +269,7 @@ def fetch_conversation(conv, text_config):
     except Exception as e:
         print(f"Ошибка: {e}")
         return conv, [], False, []
-
+    
 def fetch_all(conversations, text_config):
     """Универсальная загрузка: определяет тип сайта и использует нужный парсер"""
     results = [None] * len(conversations)
