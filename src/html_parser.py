@@ -59,12 +59,13 @@ def is_note_section_element(node):
         return True
     return False
 
-def collect_paragraphs_until_next_h2(start_node, chapters_h2, notes):
-    """Собирает параграфы от start_node до следующего h2"""
+def collect_paragraphs_until_next_header(start_node, all_headers, notes):
+    """Собирает параграфы от start_node до следующего заголовка (h2 или h3)"""
     paragraphs = []
     node = start_node.find_next()
     while node:
-        if node.name == 'h2':
+        # Останавливаемся на любом заголовке (h2 или h3)
+        if node.name in ['h2', 'h3']:
             break
         
         # Пропускаем примечания
@@ -83,7 +84,7 @@ def collect_paragraphs_until_next_h2(start_node, chapters_h2, notes):
             node = node.find_next()
             continue
         
-        # Собираем обычные параграфы
+        # Собираем обычные параграфы (любые p)
         if node.name == 'p':
             text = node.get_text(strip=True)
             if text and not re.match(r'^[\d\s]+$', text):
@@ -122,28 +123,39 @@ def fetch_single_page_conversation(conv, text_config):
         if not book_div:
             return conv, [], False, []
         
-        # Находим все заголовки h2 в порядке их следования
+        # Находим все заголовки h2 и h3 в порядке их следования в документе
+        # BeautifulSoup сохраняет порядок при find_all
         all_h2 = book_div.find_all('h2')
+        all_h3 = book_div.find_all('h3')
         
-        # Проходим по всем заголовкам
-        for h2 in all_h2:
-            text = h2.get_text(strip=True)
+        # Объединяем и сортируем по позиции в документе
+        # Используем стандартный подход: создаем список всех элементов и фильтруем
+        all_elements = []
+        for elem in book_div.find_all():
+            if elem.name in ['h2', 'h3']:
+                all_elements.append(elem)
+        
+        print(f"Найдено заголовков в порядке следования: {len(all_elements)}")
+        
+        # Проходим по всем заголовкам в порядке их следования в HTML
+        for header in all_elements:
+            text = header.get_text(strip=True)
             
-            # Пропускаем служебные заголовки
             if text == 'Содержание':
                 continue
             
-            # Создаём главу
+            level = 2 if header.name == 'h2' else 3
+            
             current_chapter = {
                 'title': text,
-                'element': h2,
+                'element': header,
+                'level': level,
                 'paragraphs': []
             }
             
-            # Собираем параграфы
-            current_chapter['paragraphs'] = collect_paragraphs_until_next_h2(h2, all_h2, notes)
+            # Собираем параграфы до следующего заголовка
+            current_chapter['paragraphs'] = collect_paragraphs_until_next_header(header, all_elements, notes)
             
-            # Добавляем главу
             chapters.append(current_chapter)
         
         return conv, chapters, False, notes

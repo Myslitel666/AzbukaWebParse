@@ -68,6 +68,7 @@ def main():
             for ch in chapters:
                 # Определяем уровень заголовка (2 или 3)
                 level = ch.get('level', 2)
+
                 if ch['element']:
                     add_heading_with_footnotes(doc, ch['element'], level, config['fonts']['chapter'])
                 
