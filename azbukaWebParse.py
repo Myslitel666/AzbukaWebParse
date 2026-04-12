@@ -17,7 +17,7 @@ from src import (
 
 # ========== ОСНОВНОЙ КОД ==========
 def main():
-    file_name = config['output_file']
+    file_name = config['headers']['main_title'] + '.docx'
     
     while True:
         if not os.path.exists(file_name):

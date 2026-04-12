@@ -1,16 +1,15 @@
 {
-    "url": "https://azbyka.ru/otechnik/Istorija_Tserkvi/biblioteka-literatury-drevnej-rusi-tom-7/",
-    "output_file": "Библиотека литературы древней Руси. Том VII.docx",
+    "url": "https://azbyka.ru/otechnik/Averkij_Taushev/apokalipsis-ili-otkrovenie-svjatogo-ioanna-bogoslova/",
     "font_name": "Arial Narrow",
     "headers": {
-        "main_title": "Библиотека литературы древней Руси. Том VII",
-        "subtitle": "Д. С. Лихачев"
+        "main_title": "Апокалипсис или откровение святого Иоанна Богослова",
+        "subtitle": "архиепископ Аверкий (Таушев)"
     },
     "margins": {
         "top_cm": 1,
         "bottom_cm": 1,
-        "left_cm": 2.5,
-        "right_cm": 2.5
+        "left_cm": 1.5,
+        "right_cm": 1.5
     },
     "fonts": {
         "main_title": {
