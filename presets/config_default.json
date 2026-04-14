@@ -1,43 +1,43 @@
 {
-    "url": "https://azbyka.ru/otechnik/Istorija_Tserkvi/biblioteka-literatury-drevnej-rusi-tom-5/",
+    "url": "https://azbyka.ru/otechnik/Feofan_Zatvornik/rukopisi-iz-keli/",
     "font_name": "Arial Narrow",
     "headers": {
-        "main_title": "Библиотека литературы Древней Руси. Том V",
-        "subtitle": "Д. С. Лихачев"
+        "main_title": "Собрание недоумений и разъяснений, избранное из евангельской симфонии",
+        "subtitle": "преподобный Исихий, пресвитер Иерусалимский"
     },
     "margins": {
         "top_cm": 1,
         "bottom_cm": 1,
-        "left_cm": 1,
-        "right_cm": 1
+        "left_cm": 1.5,
+        "right_cm": 1.5
     },
     "fonts": {
         "main_title": {
-            "size_pt": 30,
+            "size_pt": 24,
             "bold": true,
             "italic": false,
             "color_rgb": [0, 0, 0]
         },
         "subtitle": {
-            "size_pt": 24,
+            "size_pt": 14,
             "bold": true,
             "italic": true,
             "color_rgb": [0, 0, 0]
         },
         "conversation": {
-            "size_pt": 24,
+            "size_pt": 18,
             "bold": true,
             "italic": false,
             "color_rgb": [0, 0, 0]
         },
         "chapter": {
-            "size_pt": 24,
+            "size_pt": 14,
             "bold": true,
             "italic": false,
             "color_rgb": [0, 0, 0]
         },
         "text": {
-            "size_pt": 24,
+            "size_pt": 14,
             "bold": false,
             "italic": false,
             "color_rgb": [0, 0, 0],
@@ -45,7 +45,7 @@
             "alignment": "justify"
         },
         "footer": {
-            "size_pt": 24,
+            "size_pt": 10,
             "bold": false,
             "italic": false,
             "color_rgb": [0, 0, 0]
